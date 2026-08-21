@@ -1,0 +1,5 @@
+#!/bin/sh
+# 🐶 Husky pre-push hook
+# 推送前运行类型检查，防止 TypeScript 错误进入远程分支
+
+pnpm run type-check

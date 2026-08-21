@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",          // 使用 Node.js 原生 ESM 模块系统
+    "moduleResolution": "NodeNext",
+    "types": ["node"],             // 加载 Node.js 类型
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,     // 支持导入 JSON
+    "sourceMap": true              // 便于调试
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

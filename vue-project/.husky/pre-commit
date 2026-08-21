@@ -1,0 +1,5 @@
+#!/bin/sh
+# 🐶 Husky pre-commit hook
+# 在 commit 提交前自动运行 lint-staged，只检查本次改动的文件
+
+pnpm exec lint-staged
