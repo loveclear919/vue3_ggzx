@@ -1,0 +1,6 @@
+#!/bin/sh
+# 🐶 Husky pre-commit hook
+# 在 commit 提交前自动运行 lint-staged，只检查本次改动的文件
+
+# lint-staged 保留在各包内，通过 --filter 在 vue-project 目录下执行（只处理该包文件）
+pnpm --filter vue-project exec lint-staged

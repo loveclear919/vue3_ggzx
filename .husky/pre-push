@@ -1,0 +1,6 @@
+#!/bin/sh
+# 🐶 Husky pre-push hook
+# 推送前运行类型检查，防止 TypeScript 错误进入远程分支
+
+# 从 git 根执行，需要 --filter 定位到 vue-project 的 type-check 脚本
+pnpm --filter vue-project run type-check

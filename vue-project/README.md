@@ -57,25 +57,24 @@ pnpm run lint:eslint    # 只跑 ESLint（补充规则）
 
 开发者可能忘记跑 lint 就提交了脏代码。Husky 在 `git commit` 时自动拦截，lint-staged 只检查本次改的文件。
 
-**配置文件：** [.husky/pre-commit](./.husky/pre-commit)、[package.json](./package.json) 中的 `lint-staged` 字段
+**配置文件：** [仓库根 .husky/pre-commit](../.husky/pre-commit)、[package.json](./package.json) 中的 `lint-staged` 字段（lint-staged 留在本包，由根钩子 `pnpm --filter vue-project exec lint-staged` 调用）
 
 **触发规则：**
-
 | 文件类型 | 自动执行
 | `*.{vue,ts,tsx,mts}` | oxlint → Prettier
 | `*.{json,md,css,html}` | Prettier
 
-**使用方法：** 无需手动操作，每次 `git commit` 自动触发。
+配置项（写在 workspace 根 package.json）
+"scripts": { "prepare": "husky" }
+prepare 是 pnpm 的生命周期脚本：在 pnpm install 之后自动执行。
+⚠️ pnpm workspace 只会执行根包的 prepare，所以 husky 依赖与 .husky/ 必须放在仓库根。
 
-```
-git commit -m "fix: bug"
-       │
-       ▼
-  pre-commit → lint-staged（只检查改的文件）
-       │
-   ┌───┴───┐
-   ✅ 通过   ❌ 不通过 → commit 被阻止
-```
+链条
+你提交到 git 的文件： .husky/pre-commit ← 你写的钩子逻辑（团队共享，仓库根）
+↓
+prepare 时 husky 生成：.husky/_/pre-commit ← 一个"垫片"，负责调用上面那个
+↓
+git 执行钩子时： core.hooksPath 指向 .husky/_ → 找到垫片 → 执行你的脚本
 
 ---
 
@@ -85,7 +84,7 @@ git commit -m "fix: bug"
 
 `git log` 看到一堆"修改"、"fix bug"根本不知道改了啥。Conventional Commits 强制写前缀，配合工具能自动生成 Changelog。
 
-**配置文件：** [commitlint.config.ts](./commitlint.config.ts)、[.husky/commit-msg](./.husky/commit-msg)
+**配置文件：** [仓库根 commitlint.config.ts](../commitlint.config.ts)、[仓库根 .husky/commit-msg](../.husky/commit-msg)
 
 **Commit 格式：**
 
@@ -119,7 +118,7 @@ chore: 升级依赖        ✅
 
 即使格式对、lint 过、commit 规范，TypeScript 类型错误也可能漏网。pre-push 在 `git push` 前跑类型检查，防止错误进入远程仓库。
 
-**配置文件：** [.husky/pre-push](./.husky/pre-push)
+**配置文件：** [仓库根 .husky/pre-push](../.husky/pre-push)
 
 **使用方法：** `git push` 时自动触发，类型报错则阻止 push。
 
@@ -131,15 +130,12 @@ chore: 升级依赖        ✅
 
 团队里不同人用不同包管理器（pnpm / npm / yarn），同一个依赖可能解析出不同版本，导致"我这能跑啊"的幽灵 bug。
 
-**配置：** [package.json](./package.json) 中的 `packageManager` 字段
+**配置：** [根 package.json](../package.json) 中的 `packageManager` 字段（monorepo 只需在根声明一次，子包无需重复）
 
 **效果：**
 
-```bash
-pnpm install   ✅ 正常
-npm install    ❌ 被拦截
-yarn install   ❌ 被拦截
-```
+- Corepack 环境下按声明自动启用 pnpm@11.21.0，使用 npm/yarn 会被拦截
+- 非 Corepack 环境（如全局独立安装的 pnpm）仅作版本声明
 
 ---
 
@@ -247,28 +243,28 @@ git push
 
 ### 全部配置一览
 
-| 文件                                           | 管什么                   | 一句话                                          |
-| ---------------------------------------------- | ------------------------ | ----------------------------------------------- |
-| [package.json](./package.json)                 | 依赖、脚本、包管理器锁定 | 项目入口：装什么、跑什么、禁止用什么            |
-| [vite.config.ts](./vite.config.ts)             | Vite 构建配置            | 插件注册、路径别名 `@`、图标自动引入            |
-| [tsconfig.json](./tsconfig.json)               | TS 根配置                | 引用子配置 + IDE 类型提示                       |
-| [tsconfig.app.json](./tsconfig.app.json)       | TS 编译规则              | 实际编译 `src/` 的规则 + `@` 路径映射           |
-| [tsconfig.node.json](./tsconfig.node.json)     | TS Node 端规则           | `vite.config.ts` 等 Node 端文件编译             |
-| [eslint.config.ts](./eslint.config.ts)         | ESLint 规则              | Vue + TS + oxlint 代码质量检查                  |
-| [.oxlintrc.json](./.oxlintrc.json)             | oxlint 规则              | 极速 Lint，pre-commit 时毫秒级通过              |
-| [.prettierrc.json](./.prettierrc.json)         | 格式化规则               | 单引号、无分号、100 宽                          |
-| [.prettierignore](./.prettierignore)           | 格式化黑名单             | dist、node_modules 不格式化                     |
-| [.editorconfig](./.editorconfig)               | 编辑器行为               | 缩进、换行符、编码 —— 写代码时的第一道防线      |
-| [.gitattributes](./.gitattributes)             | Git 换行符               | commit 时自动转 LF —— 第二道防线                |
-| [.gitignore](./.gitignore)                     | Git 忽略                 | node_modules、dist 不进仓库                     |
-| [commitlint.config.ts](./commitlint.config.ts) | Commit 规范              | `feat:`/`fix:`/`chore:` —— 乱写会被拦           |
-| [env.d.ts](./env.d.ts)                         | TS 类型声明              | 让 TS 认识 `.vue`、`~icons/`、`import.meta.env` |
-| [.env.development](./.env.development)         | 开发环境变量             | `pnpm dev` 时加载                               |
-| [.env.production](./.env.production)           | 生产环境变量             | `pnpm build` 时加载                             |
-| [.env.test](./.env.test)                       | 测试环境变量             | `pnpm build:test` 时加载                        |
-| [.husky/pre-commit](./.husky/pre-commit)       | 提交前钩子               | 自动跑 oxlint + prettier                        |
-| [.husky/commit-msg](./.husky/commit-msg)       | 提交信息钩子             | 自动跑 commitlint                               |
-| [.husky/pre-push](./.husky/pre-push)           | 推送前钩子               | 自动跑类型检查                                  |
+| 文件                                            | 管什么                 | 一句话                                                    |
+| ----------------------------------------------- | ---------------------- | --------------------------------------------------------- |
+| [package.json](./package.json)                  | 依赖、脚本             | 项目入口：装什么、跑什么（包管理器锁定在根 package.json） |
+| [vite.config.ts](./vite.config.ts)              | Vite 构建配置          | 插件注册、路径别名 `@`、图标自动引入                      |
+| [tsconfig.json](./tsconfig.json)                | TS 根配置              | 引用子配置 + IDE 类型提示                                 |
+| [tsconfig.app.json](./tsconfig.app.json)        | TS 编译规则            | 实际编译 `src/` 的规则 + `@` 路径映射                     |
+| [tsconfig.node.json](./tsconfig.node.json)      | TS Node 端规则         | `vite.config.ts` 等 Node 端文件编译                       |
+| [eslint.config.ts](./eslint.config.ts)          | ESLint 规则            | Vue + TS + oxlint 代码质量检查                            |
+| [.oxlintrc.json](./.oxlintrc.json)              | oxlint 规则            | 极速 Lint，pre-commit 时毫秒级通过                        |
+| [.prettierrc.json](./.prettierrc.json)          | 格式化规则             | 单引号、无分号、100 宽                                    |
+| [.prettierignore](./.prettierignore)            | 格式化黑名单           | dist、node_modules 不格式化                               |
+| [.editorconfig](./.editorconfig)                | 编辑器行为             | 缩进、换行符、编码 —— 写代码时的第一道防线                |
+| [.gitattributes](./.gitattributes)              | Git 换行符             | commit 时自动转 LF —— 第二道防线                          |
+| [.gitignore](./.gitignore)                      | Git 忽略               | node_modules、dist 不进仓库                               |
+| [commitlint.config.ts](../commitlint.config.ts) | Commit 规范（仓库根）  | `feat:`/`fix:`/`chore:` —— 乱写会被拦                     |
+| [env.d.ts](./env.d.ts)                          | TS 类型声明            | 让 TS 认识 `.vue`、`~icons/`、`import.meta.env`           |
+| [.env.development](./.env.development)          | 开发环境变量           | `pnpm dev` 时加载                                         |
+| [.env.production](./.env.production)            | 生产环境变量           | `pnpm build` 时加载                                       |
+| [.env.test](./.env.test)                        | 测试环境变量           | `pnpm build:test` 时加载                                  |
+| [.husky/pre-commit](../.husky/pre-commit)       | 提交前钩子（仓库根）   | 自动跑 oxlint + prettier                                  |
+| [.husky/commit-msg](../.husky/commit-msg)       | 提交信息钩子（仓库根） | 自动跑 commitlint                                         |
+| [.husky/pre-push](../.husky/pre-push)           | 推送前钩子（仓库根）   | 自动跑类型检查                                            |
 
 ### 按工作流程
 

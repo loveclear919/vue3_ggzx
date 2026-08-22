@@ -1,0 +1,5 @@
+#!/bin/sh
+# 🐶 Husky commit-msg hook
+# 校验 commit 信息格式是否符合 Conventional Commits(commitlint.config) 规范
+
+pnpm exec commitlint --edit "$1"
