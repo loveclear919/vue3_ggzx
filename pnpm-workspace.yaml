@@ -8,4 +8,3 @@ packages:
 allowBuilds:
   esbuild: true
   '@parcel/watcher': true
-  msw: false

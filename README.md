@@ -95,7 +95,7 @@ dist/
 *.log
 ```
 
-**为什么**：`backend/.env` 里有 `JWT_SECRET` 等敏感信息绝不能入库；node_modules 体积巨大不入库。注意 `.env.development` 这类**不含敏感信息**的配置可以入库（本项目前端三份 env 文件就是随仓库提交的），密钥请放 `.env.local`。
+**为什么**：`backend/.env` 里有 `JWT_SECRET` 等敏感信息绝不能入库；node_modules 体积巨大不入库。注意 `.env.development` 这类**不含敏感信息**的配置可以入库（本项目前端三份 env 文件就是随仓库提交的），密钥请放 `.env.local`
 
 **② `pnpm-workspace.yaml`**
 
@@ -170,28 +170,3 @@ pnpm install
 ```bash
 pnpm dev
 ```
-
-预期输出：前端 `VITE ready`（http://127.0.0.1:5173）+ 后端 `✅ MongoDB 连接成功` / `服务已启动: http://localhost:3000`。
-
----
-
-## 四、常见问题（FAQ）
-
-1. **后端起不来**：本仓库后端代码是「先连上 MongoDB 才监听端口」，启动 `pnpm dev` 前先启动本地 MongoDB，否则后端直接退出（前端不受影响）。
-2. **安装成功但运行时报找不到原生模块/二进制**：该包的构建脚本被 pnpm 静默跳过了。用 `pnpm why <包名>` 确认依赖链后加入 `allowBuilds: true`，重新 `pnpm install`。
-3. **新增依赖后提示 `Ignored build scripts`**：同问题 2，按安装日志提示把需要的包加入 `allowBuilds`。
-4. **子项目的 husky 提交钩子失效了**：旧钩子路径存在子项目 `.git/config` 里（`core.hooksPath`），嵌套 .git 删除后自然失效。如需保留提交规范，可在**根级**重装 husky。
-5. **为什么根仓库里看不到子项目的提交历史**：这是新仓库，旧历史保留在改造前的远程仓库里（见第 1 步）。
-
----
-
-## 五、本仓库实际执行记录
-
-| 提交 | 说明 |
-|------|------|
-| `31c97ce` | 根仓库初始化（first commit，改造前现状） |
-| `6450afe` | 根级 workspace 配置 + 统一锁文件 |
-| `8f508ab` | 运行后重新生成的 auto-imports 类型声明 |
-| `873bbd4` | 本手册 |
-
-改造日期：2026-08-21；pnpm 11.21.0，Node v26.6.0，安装耗时 38.8s / 564 个包。

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { auth, AuthRequest } from '../middlewares/auth.js'
 import { User, toUserDTO } from '../models/User.js'
+import { AppError } from '../utils/AppError.js'
 
 const router = Router()
 
@@ -11,8 +12,7 @@ router.use(auth)
 router.get('/info', async (req: AuthRequest, res) => {
   const user = await User.findById(req.userId)
   if (!user) {
-    res.status(404).json({ code: 404, message: '用户不存在' })
-    return
+    throw AppError.notFound('用户不存在')
   }
 
   res.json({
@@ -30,16 +30,14 @@ router.patch('/info', async (req: AuthRequest, res) => {
     const val = req.body[key]
     if (val !== undefined) {
       if (typeof val !== 'string' || val.length > 500) {
-        res.status(400).json({ code: 400, message: `${key} 格式不合法` })
-        return
+        throw AppError.badRequest(`${key} 格式不合法`)
       }
       updates[key] = val
     }
   }
 
   if (Object.keys(updates).length === 0) {
-    res.status(400).json({ code: 400, message: '没有需要更新的字段' })
-    return
+    throw AppError.badRequest('没有需要更新的字段')
   }
 
   const user = await User.findByIdAndUpdate(req.userId, updates, {
@@ -47,8 +45,7 @@ router.patch('/info', async (req: AuthRequest, res) => {
     runValidators: true,
   })
   if (!user) {
-    res.status(404).json({ code: 404, message: '用户不存在' })
-    return
+    throw AppError.notFound('用户不存在')
   }
 
   res.json({
