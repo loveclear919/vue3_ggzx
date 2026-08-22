@@ -13,8 +13,11 @@ import { FileSystemIconLoader } from 'unplugin-icons/loaders'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    // 让 Vite 能编译 .vue 单文件组件
     vue(),
+    // 集成 Vue 官方浏览器调试面板
     vueDevTools(),
+    // 把图标库/本地 SVG 转成 Vue 组件（~icons/xxx）
     Icons({
       autoInstall: true,
       compiler: 'vue3',
@@ -23,9 +26,11 @@ export default defineConfig({
         local: FileSystemIconLoader('src/assets/icons'),
       },
     }),
+    // 自动 import 函数式 API（ElMessage 这类）
     AutoImport({
       resolvers: [ElementPlusResolver()],
     }),
+    // 自动注册模板组件 <el-button>等
     Components({
       resolvers: [
         IconsResolver({
@@ -34,6 +39,7 @@ export default defineConfig({
           // alias: { park: 'icon-park' } 集合的别名
           enabledCollections: ['ep', 'mdi'], // 这是可选的，默认启用 Iconify 支持的所有集合['mdi']
         }),
+        // 把"组件名"解析成"import 路径 + 样式路径"
         ElementPlusResolver(),
       ],
     }),
@@ -41,10 +47,12 @@ export default defineConfig({
   css: {
     preprocessorOptions: {
       scss: {
+        // 给每个 SCSS 文件顶部自动注入
         additionalData: `@use "@/styles/variables.scss" as *;`,
       },
     },
   },
+  // 开发时把 /api 转发到后端 3000
   server: {
     host: '127.0.0.1',
     proxy: {
@@ -54,6 +62,7 @@ export default defineConfig({
       },
     },
   },
+  // 把 @/ 映射到 src/
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

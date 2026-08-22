@@ -1,6 +1,7 @@
 import axios, { type AxiosRequestConfig } from 'axios'
-import { ElMessage } from 'element-plus'
 import router from '@/router'
+
+// ElMessage 由 unplugin-auto-import 按需注入（含样式），无需手动导入
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_APP_BASE_API,

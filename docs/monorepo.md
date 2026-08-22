@@ -36,7 +36,7 @@ vue3_ggzx/
 |------|------|---------|
 | Node.js | `^22.18.0 \|\| >=24.12.0` | `node -v` |
 | pnpm | `11.21.0` | `pnpm -v` |
-| MongoDB | 本地已启动 | `netstat -ano \| grep 27017` |
+| MongoDB | 本地已启动 | 启动命令：mongod --dbpath "D:\data\db" |
 
 ---
 

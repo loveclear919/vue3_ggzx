@@ -3,8 +3,9 @@ import { reactive, ref } from 'vue'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useRoute, useRouter } from 'vue-router'
-import { ElNotification } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+
+// ElNotification 由 unplugin-auto-import 按需注入（含样式），无需手动导入
 
 const userStore = useUserStore()
 const $router = useRouter()
