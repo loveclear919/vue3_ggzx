@@ -21,7 +21,7 @@
       "oxlint --fix",
       "prettier --write"
     ],
-    "*.{json,md,css,html}": [
+    "*.{json,md,css,html,scss}": [
       "prettier --write"
     ]
   },

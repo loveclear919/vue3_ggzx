@@ -7,14 +7,12 @@ import { ArrowRight, Fold } from '@element-plus/icons-vue'
       <el-icon>
         <Fold />
       </el-icon>
-      <template>
-        <el-breadcrumb :separator-icon="ArrowRight">
-          <el-breadcrumb-item :to="{ path: '/' }">homepage</el-breadcrumb-item>
-          <el-breadcrumb-item>promotion management</el-breadcrumb-item>
-          <el-breadcrumb-item>promotion list</el-breadcrumb-item>
-          <el-breadcrumb-item>promotion detail</el-breadcrumb-item>
-        </el-breadcrumb>
-      </template>
+      <el-breadcrumb :separator-icon="ArrowRight">
+        <el-breadcrumb-item :to="{ path: '/' }">homepage</el-breadcrumb-item>
+        <el-breadcrumb-item>promotion management</el-breadcrumb-item>
+        <el-breadcrumb-item>promotion list</el-breadcrumb-item>
+        <el-breadcrumb-item>promotion detail</el-breadcrumb-item>
+      </el-breadcrumb>
     </div>
     <div class="tabbar-right"></div>
   </div>

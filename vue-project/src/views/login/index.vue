@@ -4,8 +4,7 @@ import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
-
-// ElNotification 由 unplugin-auto-import 按需注入（含样式），无需手动导入
+import { getTimePeriod } from '@/utils/time'
 
 const userStore = useUserStore()
 const $router = useRouter()
@@ -26,7 +25,7 @@ const loginForm = reactive({
   password: '',
 })
 
-// 表单实例引用
+// 获取表单实例
 const registerFormRef = ref<FormInstance>()
 const loginFormRef = ref<FormInstance>()
 
@@ -35,6 +34,18 @@ const registerRules: FormRules = {
   username: [
     { type: 'string', required: true, message: '请输入用户名', trigger: 'blur' },
     { type: 'string', min: 3, max: 20, message: '用户名长度 3-20 个字符', trigger: 'blur' },
+    {
+      type: 'string',
+      // 	(rule, value, callback) => {...}
+      validator: (_rule, value, callback) => {
+        if (/^[\w\-－＿０-９\u4e00-\u9fa5\uFF21-\uFF3A\uFF41-\uFF5A]+$/.test(value)) {
+          callback()
+        } else {
+          callback(new Error('用户名仅支持中英文、数字、下划线和短横线，且不包含空格'))
+        }
+      },
+      trigger: 'blur',
+    },
   ],
   password: [
     { type: 'string', required: true, message: '请输入密码', trigger: 'blur' },
@@ -71,7 +82,10 @@ const login = async () => {
 
   try {
     await userStore.login(loginForm.username, loginForm.password)
-    ElNotification.success({ title: '登录成功', message: `欢迎回来，${loginForm.username}` })
+    ElNotification.success({
+      title: `${getTimePeriod()}好`,
+      message: `欢迎回来，${loginForm.username}`,
+    })
     // 支持路由守卫传来的 redirect 参数，登录后跳回原页面
     const redirect = ($route.query.redirect as string) || '/'
     $router.push(redirect)
@@ -93,8 +107,9 @@ const register = async () => {
     registerForm.password = ''
     registerForm.confirmPassword = ''
     flipped.value = true
-  } catch {
+  } catch (e) {
     // ② 后端兜底（如用户名已存在），提示由拦截器弹出
+    console.error('[register] 注册失败:', e)
   }
 }
 </script>
@@ -111,7 +126,6 @@ const register = async () => {
             <div class="flip-face front">
               <h2>欢迎注册</h2>
               <p>创建你的新账号</p>
-
               <el-form ref="registerFormRef" :model="registerForm" :rules="registerRules">
                 <el-form-item prop="username">
                   <el-input
@@ -121,7 +135,6 @@ const register = async () => {
                     :prefix-icon="User"
                   />
                 </el-form-item>
-
                 <el-form-item prop="password">
                   <el-input
                     v-model="registerForm.password"
@@ -132,7 +145,6 @@ const register = async () => {
                     show-password
                   />
                 </el-form-item>
-
                 <el-form-item prop="confirmPassword">
                   <el-input
                     v-model="registerForm.confirmPassword"
@@ -143,19 +155,16 @@ const register = async () => {
                     show-password
                   />
                 </el-form-item>
-
                 <el-button type="primary" size="large" class="submit-btn" round @click="register">
                   注 册
                 </el-button>
               </el-form>
-
               <div class="switch-link" @click="flipped = true">已有账号？去登录</div>
             </div>
             <!-- 背面：登录表单 -->
             <div class="flip-face back">
               <h2>欢迎回来</h2>
               <p>登录你的账号</p>
-
               <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules">
                 <el-form-item prop="username">
                   <el-input
@@ -165,7 +174,6 @@ const register = async () => {
                     :prefix-icon="User"
                   />
                 </el-form-item>
-
                 <el-form-item prop="password">
                   <el-input
                     v-model="loginForm.password"
@@ -176,12 +184,10 @@ const register = async () => {
                     show-password
                   />
                 </el-form-item>
-
                 <el-button type="primary" size="large" class="submit-btn" round @click="login">
                   登 录
                 </el-button>
               </el-form>
-
               <div class="switch-link" @click="flipped = false">没有账号？去注册</div>
             </div>
           </div>

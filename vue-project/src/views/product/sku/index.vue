@@ -1,9 +1,6 @@
 <script setup lang="ts"></script>
-
 <template>
   <div>
-    <h1>Test</h1>
+    <h1>SKU管理</h1>
   </div>
 </template>
-
-<style scoped></style>

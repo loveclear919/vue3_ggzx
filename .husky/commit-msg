@@ -2,4 +2,5 @@
 # 🐶 Husky commit-msg hook
 # 校验 commit 信息格式是否符合 Conventional Commits(commitlint.config) 规范
 
+# $1 是"存放本次提交信息的临时文件路径" 加引号是为了防止shell因为空格进行单词拆分
 pnpm exec commitlint --edit "$1"

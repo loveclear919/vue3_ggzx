@@ -1,2 +1,20 @@
 // 引入清除默认样式
 @use './reset.scss';
+
+/* 滚动条滑块颜色 */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: $vivo-dark;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient($vivo-blue, $vivo-cyan);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient($vivo-cyan, $vivo-blue);
+}

@@ -1,2 +1,15 @@
-$color: red;
-$blue: blue;
+// 通用
+$logo-font: clamp(14px, 1.1vw, 20px);
+// 图标统一尺寸（菜单项图标）
+$base-menu-icon-size: clamp(16px, 1.15vw, 19px);
+// 滚动条
+$vivo-dark: #121212;
+$vivo-blue: #1976d2;
+$vivo-cyan: #00e5ff;
+// 左侧导航
+$base-menu-width: clamp(200px, 14vw, 260px);
+$base-menu-background: #001529;
+$base-menu-logo-height: clamp(60px, 7.5vh, 80px);
+$base-menu-logo-color: #409eff;
+// 顶部导航（与 Logo 同高，保证左上角视觉对齐）
+$base-tabbar-height: clamp(60px, 7.5vh, 80px);

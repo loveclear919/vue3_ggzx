@@ -69,7 +69,7 @@ pnpm run lint:eslint    # 只跑 ESLint（补充规则）
 prepare 是 pnpm 的生命周期脚本：在 pnpm install 之后自动执行。
 ⚠️ pnpm workspace 只会执行根包的 prepare，所以 husky 依赖与 .husky/ 必须放在仓库根。
 
-链条
+链条：
 你提交到 git 的文件： .husky/pre-commit ← 你写的钩子逻辑（团队共享，仓库根）
 ↓
 prepare 时 husky 生成：.husky/_/pre-commit ← 一个"垫片"，负责调用上面那个
@@ -262,6 +262,7 @@ git push
 | [.env.development](./.env.development)          | 开发环境变量           | `pnpm dev` 时加载                                         |
 | [.env.production](./.env.production)            | 生产环境变量           | `pnpm build` 时加载                                       |
 | [.env.test](./.env.test)                        | 测试环境变量           | `pnpm build:test` 时加载                                  |
+| [.env.example](./.env.example)                  | 环境变量模板           | 新环境照着复制改名即可启动                                |
 | [.husky/pre-commit](../.husky/pre-commit)       | 提交前钩子（仓库根）   | 自动跑 oxlint + prettier                                  |
 | [.husky/commit-msg](../.husky/commit-msg)       | 提交信息钩子（仓库根） | 自动跑 commitlint                                         |
 | [.husky/pre-push](../.husky/pre-push)           | 推送前钩子（仓库根）   | 自动跑类型检查                                            |
