@@ -7,9 +7,10 @@ $vivo-dark: #121212;
 $vivo-blue: #1976d2;
 $vivo-cyan: #00e5ff;
 // 左侧导航
-$base-menu-width: clamp(200px, 14vw, 260px);
+$base-menu-width: 260px;
+$base-menu-collapsed-width: 64px;
 $base-menu-background: #001529;
-$base-menu-logo-height: clamp(60px, 7.5vh, 80px);
+$base-menu-logo-height: 80px;
 $base-menu-logo-color: #409eff;
 // 顶部导航（与 Logo 同高，保证左上角视觉对齐）
-$base-tabbar-height: clamp(60px, 7.5vh, 80px);
+$base-tabbar-height: 80px;

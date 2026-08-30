@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getMenuIcon } from '@/layout/menu/iconMap'
+import { getMenuIcon } from '@/utils/iconMap'
 import type { RouteRecordRaw } from 'vue-router'
 defineProps<{ menuList: RouteRecordRaw[] }>()
 defineOptions({ name: 'AppMenu' })

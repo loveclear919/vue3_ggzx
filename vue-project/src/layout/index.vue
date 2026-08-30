@@ -5,19 +5,26 @@ import Main from '@/layout/main/index.vue'
 import TabBar from '@/layout/tabbar/index.vue'
 import { useRoute } from 'vue-router'
 import { usePermissionStore } from '@/stores/permission'
+import { useSettingStore } from '@/stores/setting'
+const settingStore = useSettingStore()
 const permissionStore = usePermissionStore()
 const route = useRoute()
-console.log(route)
 </script>
 <template>
-  <div class="layout_container">
+  <div class="layout_container" :class="{ collapsed: settingStore.fold }">
     <!-- 左侧菜单 -->
     <div class="layout_slider">
       <!-- Logo -->
       <Logo></Logo>
       <!-- 展示菜单 -->
       <el-scrollbar class="scrollbar">
-        <el-menu class="menu" :router="true" :default-active="route.path">
+        <el-menu
+          class="menu"
+          :router="true"
+          :default-active="route.path"
+          :collapse="settingStore.fold"
+          :collapse-transition="false"
+        >
           <Menu :menuList="permissionStore.routes"></Menu>
         </el-menu>
       </el-scrollbar>
@@ -38,12 +45,19 @@ console.log(route)
   width: 100%;
   height: 100vh;
   background-color: white;
+  // 统一设置侧边栏宽度
+  --menu-width: #{$base-menu-width};
+
+  &.collapsed {
+    --menu-width: #{$base-menu-collapsed-width};
+  }
 
   .layout_slider {
-    width: $base-menu-width;
+    width: var(--menu-width);
     height: 100vh;
     background-color: $base-menu-background;
     color: white;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     .scrollbar {
       width: 100%;
@@ -61,21 +75,24 @@ console.log(route)
   .layout_tabbar {
     position: fixed;
     top: 0;
-    left: $base-menu-width;
-    width: calc(100% - $base-menu-width);
+    left: var(--menu-width);
+    z-index: 1;
+    width: calc(100% - var(--menu-width));
     height: $base-tabbar-height;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .layout_main {
     position: absolute;
-    left: $base-menu-width;
+    left: var(--menu-width);
     top: $base-tabbar-height;
     padding: 10px;
-    width: calc(100% - $base-menu-width);
+    width: calc(100% - var(--menu-width));
     height: calc(100vh - $base-tabbar-height);
     // 防止内容溢出
     overflow: auto;
     background-color: skyblue;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 </style>

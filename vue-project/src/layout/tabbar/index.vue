@@ -1,27 +1,20 @@
 <script setup lang="ts">
-import { ArrowRight, Fold } from '@element-plus/icons-vue'
+import { Refresh, FullScreen, Setting } from '@element-plus/icons-vue'
+import Breadcrumb from './breadcrumb/index.vue'
+import Avatar from './avatar/index.vue'
 </script>
 <template>
   <div class="tabbar">
-    <div class="tabbar-left">
-      <el-icon>
-        <Fold />
-      </el-icon>
-      <el-breadcrumb :separator-icon="ArrowRight">
-        <el-breadcrumb-item :to="{ path: '/' }">homepage</el-breadcrumb-item>
-        <el-breadcrumb-item>promotion management</el-breadcrumb-item>
-        <el-breadcrumb-item>promotion list</el-breadcrumb-item>
-        <el-breadcrumb-item>promotion detail</el-breadcrumb-item>
-      </el-breadcrumb>
+    <Breadcrumb />
+    <div class="tabbar-right">
+      <Avatar />
+      <el-button type="primary" circle :icon="Refresh"></el-button>
+      <el-button type="primary" circle :icon="FullScreen"></el-button>
+      <el-button type="primary" circle :icon="Setting"></el-button>
     </div>
-    <div class="tabbar-right"></div>
   </div>
 </template>
 <style scoped lang="scss">
-:deep(.el-icon) {
-  font-size: $base-menu-icon-size;
-}
-
 .tabbar {
   display: flex;
   align-items: center;
@@ -29,10 +22,12 @@ import { ArrowRight, Fold } from '@element-plus/icons-vue'
   width: 100%;
   height: 100%;
 
-  .tabbar-left {
+  .tabbar-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    margin-right: 30px;
+    gap: 20px;
   }
 }
 </style>

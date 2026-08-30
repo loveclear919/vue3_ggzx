@@ -14,6 +14,7 @@ export const menuRoutes = [
   {
     path: '/acl',
     name: 'acl',
+    redirect: '/acl/users',
     meta: { title: '权限管理', icon: 'Lock', hidden: false },
     children: [
       {
@@ -39,6 +40,7 @@ export const menuRoutes = [
   {
     path: '/product',
     name: 'product',
+    redirect: '/product/trademark',
     meta: { title: '商品管理', icon: 'Goods', hidden: false },
     children: [
       {
