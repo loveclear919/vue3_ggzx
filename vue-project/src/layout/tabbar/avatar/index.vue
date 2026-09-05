@@ -1,5 +1,14 @@
 <script setup lang="ts">
 import { Right, User } from '@element-plus/icons-vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+const $router = useRouter()
+const $route = useRoute()
+const userStore = useUserStore()
+const logout = () => {
+  userStore.logout()
+  $router.push({ path: '/login', query: { redirect: $route.path } })
+}
 </script>
 <template>
   <div class="avatar-wrapper">
@@ -7,7 +16,7 @@ import { Right, User } from '@element-plus/icons-vue'
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>Loveclear</span>
+          <span>{{ userStore.userInfo?.username }}</span>
         </div>
       </template>
       <button class="user-btn" type="button">
@@ -17,7 +26,7 @@ import { Right, User } from '@element-plus/icons-vue'
         <span>个人中心</span>
       </button>
       <template #footer>
-        <button class="logout-btn" type="button">
+        <button class="logout-btn" type="button" @click="logout">
           <el-icon>
             <Right />
           </el-icon>
@@ -34,7 +43,7 @@ import { Right, User } from '@element-plus/icons-vue'
 
   img {
     position: relative;
-    z-index: 2;
+    z-index: 10;
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -48,7 +57,7 @@ import { Right, User } from '@element-plus/icons-vue'
     opacity: 0;
     visibility: hidden;
     width: 240px;
-    z-index: 1;
+    z-index: 9;
     color: #61666d;
 
     .el-icon {

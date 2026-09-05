@@ -14,3 +14,5 @@ $base-menu-logo-height: 80px;
 $base-menu-logo-color: #409eff;
 // 顶部导航（与 Logo 同高，保证左上角视觉对齐）
 $base-tabbar-height: 80px;
+// z-index 层级体系：内容区 0 < 外壳(顶部导航) 100 < Element Plus 弹层(2000+)
+$z-tabbar: 100;

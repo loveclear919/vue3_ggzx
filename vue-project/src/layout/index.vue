@@ -76,7 +76,7 @@ const route = useRoute()
     position: fixed;
     top: 0;
     left: var(--menu-width);
-    z-index: 1;
+    z-index: $z-tabbar;
     width: calc(100% - var(--menu-width));
     height: $base-tabbar-height;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -84,6 +84,9 @@ const route = useRoute()
 
   .layout_main {
     position: absolute;
+    // 关键：非 auto 的 z-index 让内容区形成独立层叠上下文，
+    // 内部组件（el-table sticky 头、固定列等）的 z-index 永不外溢压过外壳
+    z-index: 0;
     left: var(--menu-width);
     top: $base-tabbar-height;
     padding: 10px;
@@ -91,7 +94,6 @@ const route = useRoute()
     height: calc(100vh - $base-tabbar-height);
     // 防止内容溢出
     overflow: auto;
-    background-color: skyblue;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }

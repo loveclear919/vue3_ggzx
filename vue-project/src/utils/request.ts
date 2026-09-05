@@ -54,24 +54,25 @@ request.interceptors.response.use(
 )
 
 // HTTP 封装
+// 默认泛型用 unknown 而非 any：不声明类型的调用拿到 unknown，必须显式处理才能用
 const http = {
-  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
     return request.get(url, config) as Promise<T>
   },
 
-  post<T = any>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     return request.post(url, data, config) as Promise<T>
   },
 
-  put<T = any>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     return request.put(url, data, config) as Promise<T>
   },
 
-  patch<T = any>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  patch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     return request.patch(url, data, config) as Promise<T>
   },
 
-  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  delete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
     return request.delete(url, config) as Promise<T>
   },
 }

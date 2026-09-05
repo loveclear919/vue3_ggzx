@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { AppError } from '../utils/AppError.js'
 
+// Express 约定的错误处理中间件，必须有四个参数，且第一个参数是错误对象
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
   console.error('未捕获的错误:', err) // 完整细节只进服务端日志
 
@@ -31,7 +32,15 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return
   }
 
-  // 5. 兜底：一切未预期错误 → 通用文案，绝不吐内部细节
+  // 5. multer 上传错误（文件超限等）
+  if (e.name === 'MulterError') {
+    const code = (err as { code?: string }).code
+    const message = code === 'LIMIT_FILE_SIZE' ? '图片大小不能超过 2MB' : '文件上传失败'
+    res.status(400).json({ code: 400, message })
+    return
+  }
+
+  // 5. 兜底：一切未预期错误
   res.status(500).json({ code: 500, message: '服务器内部错误' })
 }
 

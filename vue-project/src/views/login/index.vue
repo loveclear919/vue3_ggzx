@@ -83,8 +83,8 @@ const login = async () => {
   try {
     await userStore.login(loginForm.username, loginForm.password)
     ElNotification.success({
-      title: `${getTimePeriod()}好`,
-      message: `欢迎回来，${loginForm.username}`,
+      title: `${getTimePeriod()}好!`,
+      message: `欢迎回来，${loginForm.username}!`,
     })
     // 支持路由守卫传来的 redirect 参数，登录后跳回原页面
     const redirect = ($route.query.redirect as string) || '/'

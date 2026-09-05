@@ -62,7 +62,7 @@ pnpm run lint:eslint    # 只跑 ESLint（补充规则）
 **触发规则：**
 | 文件类型 | 自动执行
 | `*.{vue,ts,tsx,mts}` | oxlint → Prettier
-| `*.{json,md,css,html}` | Prettier
+| `*.{json,md,css,html,scss}` | Prettier
 
 配置项（写在 workspace 根 package.json）
 "scripts": { "prepare": "husky" }

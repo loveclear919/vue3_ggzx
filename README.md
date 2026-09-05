@@ -39,9 +39,11 @@ vue3_ggzx
 │   ├── src/
 │   │   ├── config/             #   MongoDB 连接
 │   │   ├── models/             #   User 模型（bcrypt 加盐、DTO 脱敏）
-│   │   ├── routes/             #   auth（注册/登录）、user（信息查看/更新）
+│   │   ├── routes/             #   接线层：URL/方法 → controller（不含业务）
+│   │   ├── controllers/        #   处理层：解析参数、组装响应
+│   │   ├── services/           #   业务层：查库、bcrypt、JWT、业务规则
 │   │   ├── middlewares/        #   JWT 鉴权、统一错误处理、限流
-│   │   ├── utils/              #   AppError 业务错误
+│   │   ├── utils/              #   AppError 业务错误、统一响应封装
 │   │   └── index.ts            #   入口（helmet/cors/路由挂载）
 │   └── .env.example            #   环境变量模板（复制为 .env 使用）
 ├── vue-project/                # Vue 3 前端（端口 5173，/api 代理到后端）

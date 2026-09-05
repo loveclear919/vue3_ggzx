@@ -2,14 +2,26 @@
 import { Refresh, FullScreen, Setting } from '@element-plus/icons-vue'
 import Breadcrumb from './breadcrumb/index.vue'
 import Avatar from './avatar/index.vue'
+import { useSettingStore } from '@/stores/setting'
+const settingStore = useSettingStore()
 </script>
 <template>
   <div class="tabbar">
     <Breadcrumb />
     <div class="tabbar-right">
       <Avatar />
-      <el-button type="primary" circle :icon="Refresh"></el-button>
-      <el-button type="primary" circle :icon="FullScreen"></el-button>
+      <el-button
+        type="primary"
+        circle
+        :icon="Refresh"
+        @click="settingStore.refreshPage()"
+      ></el-button>
+      <el-button
+        type="primary"
+        circle
+        :icon="FullScreen"
+        @click="settingStore.fullScreen()"
+      ></el-button>
       <el-button type="primary" circle :icon="Setting"></el-button>
     </div>
   </div>

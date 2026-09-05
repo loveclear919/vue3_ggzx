@@ -44,6 +44,10 @@ const bread = computed(() => {
     font-size: $base-menu-icon-size;
   }
 
+  .breadcrumb-icon:hover {
+    cursor: pointer;
+  }
+
   .el-breadcrumb {
     // 每个项内部：图标 + 文字 用 flex 垂直居中，间距交给 gap
     :deep(.el-breadcrumb__inner) {

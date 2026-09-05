@@ -1,5 +1,4 @@
 import { fileURLToPath, URL } from 'node:url'
-
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
@@ -52,7 +51,7 @@ export default defineConfig({
       },
     },
   },
-  // 开发时把 /api 转发到后端 3000
+  // 开发时把 /api 与上传文件 /uploads 转发到后端 3000
   server: {
     host: '127.0.0.1',
     proxy: {
@@ -60,9 +59,14 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
+      '/uploads': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
   // 把 @/ 映射到 src/
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

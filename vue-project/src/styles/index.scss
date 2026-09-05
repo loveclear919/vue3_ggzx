@@ -18,3 +18,8 @@
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient($vivo-cyan, $vivo-blue);
 }
+
+// 进度条
+#nprogress .bar {
+  background: $vivo-blue !important;
+}

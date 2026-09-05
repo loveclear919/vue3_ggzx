@@ -26,7 +26,7 @@ export const menuRoutes = [
       {
         path: '/acl/roles',
         name: 'roles',
-        component: () => import('@/views/acl/ruler/index.vue'),
+        component: () => import('@/views/acl/role/index.vue'),
         meta: { title: '角色管理', icon: 'UserFilled', hidden: false },
       },
       {

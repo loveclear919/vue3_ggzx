@@ -18,6 +18,9 @@ logs/
 *.log
 pnpm-debug.log*
 
+# 上传文件（本地存储，不进版本库）
+backend/uploads/
+
 # Editor / OS
 .DS_Store
 .idea/

@@ -1,8 +1,11 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { useSettingStore } from '@/stores/setting'
+const settingStore = useSettingStore()
+</script>
 <template>
   <router-view v-slot="{ Component }">
     <transition name="fade" mode="out-in">
-      <component :is="Component" />
+      <component :is="Component" v-if="!settingStore.refresh" />
     </transition>
   </router-view>
 </template>
