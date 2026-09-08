@@ -3,9 +3,11 @@ import { useSettingStore } from '@/stores/setting'
 const settingStore = useSettingStore()
 </script>
 <template>
-  <router-view v-slot="{ Component }">
+  <router-view v-slot="{ Component, route }">
     <transition name="fade" mode="out-in">
-      <component :is="Component" v-if="!settingStore.refresh" />
+      <div :key="route.path" v-if="!settingStore.refresh">
+        <component :is="Component" />
+      </div>
     </transition>
   </router-view>
 </template>

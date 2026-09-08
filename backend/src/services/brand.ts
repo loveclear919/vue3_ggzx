@@ -71,7 +71,7 @@ export async function updateBrand(id: string, updates: Record<string, unknown>) 
 
   // catch 只负责「数据库错误 → 409」的转换；notFound 是正常流程判断，留在 try 外面
   // new: 返回更新后的文档；runValidators: 走模型校验
-  const brand = await Brand.findByIdAndUpdate(id, patch, { new: true, runValidators: true }).catch(
+  const brand = await Brand.findByIdAndUpdate(id, patch, { returnDocument: 'after', runValidators: true }).catch(
     (err) => {
       // 改成已存在的品牌名 → 唯一索引冲突
       if (isDuplicateKeyError(err)) {

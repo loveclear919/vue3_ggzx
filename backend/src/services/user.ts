@@ -31,7 +31,7 @@ export async function updateUserInfo(userId: string, body: Record<string, unknow
   }
 
   const user = await User.findByIdAndUpdate(userId, updates, {
-    new: true,
+    returnDocument: 'after',
     runValidators: true,
   })
   if (!user) {

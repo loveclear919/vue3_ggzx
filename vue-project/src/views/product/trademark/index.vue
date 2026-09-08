@@ -96,7 +96,6 @@ const uploading = ref(false)
 
 // 上传前客户端校验（与后端 multer 白名单一致，双重防线）
 const beforeUpload: UploadProps['beforeUpload'] = (rawFile) => {
-  console.log(rawFile)
   if (!rawFile.type.startsWith('image/')) {
     ElMessage.error('仅支持图片文件')
     return false
@@ -109,7 +108,6 @@ const beforeUpload: UploadProps['beforeUpload'] = (rawFile) => {
 
 // 自定义上传
 const handleUpload: UploadRequestHandler = async (options) => {
-  console.log('上传文件', options)
   uploading.value = true
   try {
     const formData = new FormData()

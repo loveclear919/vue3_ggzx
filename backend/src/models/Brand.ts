@@ -3,6 +3,8 @@ import mongoose from 'mongoose'
 export interface IBrand {
   name: string
   logoUrl: string
+  createdAt: Date // timestamps: true 自动生成 —— 接口声明与运行时对齐（sort/未来 DTO 暴露都用得上）
+  updatedAt: Date
 }
 
 const brandSchema = new mongoose.Schema<IBrand>(
