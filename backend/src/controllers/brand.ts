@@ -16,6 +16,11 @@ export async function listBrands(req: Request, res: Response) {
   ok(res, data)
 }
 
+export async function listAllBrands(_req: Request, res: Response) {
+  const data = await brandService.listAllBrands()
+  ok(res, data)
+}
+
 export async function createBrand(req: Request, res: Response) {
   const { name, logoUrl } = req.body
 

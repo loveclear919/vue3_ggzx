@@ -7,6 +7,6 @@ const router = Router()
 
 router.use(auth)
 
-router.get('/tree', categoryController.getTree)
+router.get('/', categoryController.listCategories)
 
 export default router

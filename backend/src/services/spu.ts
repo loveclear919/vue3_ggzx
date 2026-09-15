@@ -1,0 +1,353 @@
+import {
+  Spu,
+  SPU_LIMITS,
+  toSpuDTO,
+  type ISpuAttr,
+  type ISpuImage,
+  type ISpuSaleAttr,
+} from '../models/Spu.js'
+import { Brand } from '../models/Brand.js'
+import { Category } from '../models/Category.js'
+import { Attr } from '../models/Attr.js'
+import { BaseSaleAttr } from '../models/BaseSaleAttr.js'
+import { AppError } from '../utils/AppError.js'
+import { escapeRegExp } from '../utils/escapeRegExp.js'
+import { isDuplicateKeyError } from '../utils/mongoError.js'
+
+// 业务层：SPU 管理
+
+export interface ListSpusParams {
+  category3Id: string
+  page: number
+  pageSize: number
+  keyword?: string
+}
+
+// 判断是否为普通对象（非 null、非数组），用于类型收窄
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// 清洗字符串：去空白、空串转 undefined
+function cleanString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.trim() : undefined
+}
+
+// 字符串数组归一化
+function normalizeStringList(list: unknown[], maxLen: number): string[] {
+  const result: string[] = []
+  const seen = new Set<string>()
+  for (const item of list) {
+    if (typeof item !== 'string' && typeof item !== 'number') continue
+    const value = String(item).trim().slice(0, maxLen)
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    result.push(value)
+  }
+  return result
+}
+
+// 三级分类才能挂 SPU（与属性模块规则一致）
+async function ensureCategory3(categoryId: string) {
+  const category = await Category.findById(categoryId)
+  if (!category) {
+    throw AppError.notFound('分类不存在')
+  }
+  if (category.level !== 3) {
+    throw AppError.badRequest('只有三级分类下才有 SPU')
+  }
+}
+
+// 确保品牌存在
+async function ensureBrand(brandId: string) {
+  const brand = await Brand.findById(brandId)
+  if (!brand) {
+    throw AppError.notFound('品牌不存在')
+  }
+}
+
+// 图片归一化：缺文件名的从 URL 末段派生
+function normalizeImageList(input: unknown): ISpuImage[] {
+  if (!Array.isArray(input)) return []
+  const images: ISpuImage[] = []
+  for (const item of input) {
+    if (!isRecord(item)) continue
+    const imageUrl = cleanString(item.imageUrl)
+    if (!imageUrl) continue
+    const imageName = (cleanString(item.imageName) ?? imageUrl.split('/').pop() ?? '').slice(
+      0,
+      SPU_LIMITS.IMAGE_NAME_LENGTH,
+    )
+    images.push({ imageUrl, imageName })
+    if (images.length >= SPU_LIMITS.MAX_IMAGE_COUNT) break
+  }
+  return images
+}
+
+// 平台属性归一化：用户只填其中几个是正常状态，丢弃等于删掉可填项
+function normalizeAttrList(input: unknown): ISpuAttr[] {
+  if (!Array.isArray(input)) return []
+  const attrs: ISpuAttr[] = []
+  const seen = new Set<string>()
+  for (const item of input) {
+    if (!isRecord(item)) continue
+    const attrName = cleanString(item.attrName)
+    // 同名属性只保留首次出现的行（前端从平台属性初始化，正常不会重复；这里兜底恶意/脏请求）
+    if (!attrName || seen.has(attrName)) continue
+    seen.add(attrName)
+    attrs.push({
+      attrName: attrName.slice(0, SPU_LIMITS.ATTR_NAME_LENGTH),
+      attrValue: (cleanString(item.attrValue) ?? '').slice(0, SPU_LIMITS.ATTR_VALUE_LENGTH),
+    })
+    if (attrs.length >= SPU_LIMITS.MAX_ATTR_COUNT) break
+  }
+  return attrs
+}
+
+// 销售属性归一化
+function normalizeSaleAttrList(input: unknown): ISpuSaleAttr[] {
+  if (!Array.isArray(input)) return []
+  const saleAttrs: ISpuSaleAttr[] = []
+  const seen = new Set<string>()
+  for (const item of input) {
+    if (!isRecord(item)) continue
+    const saleAttrName = cleanString(item.saleAttrName)
+    const saleAttrValueList = normalizeStringList(
+      Array.isArray(item.saleAttrValueList) ? item.saleAttrValueList : [],
+      SPU_LIMITS.SALE_ATTR_VALUE_LENGTH,
+    )
+
+    if (!saleAttrName && saleAttrValueList.length === 0) continue
+    if (!saleAttrName) {
+      throw AppError.badRequest('销售属性值缺少所属的属性名')
+    }
+    if (saleAttrValueList.length === 0) {
+      throw AppError.badRequest(`销售属性「${saleAttrName}」至少需要一个属性值`)
+    }
+
+    // 同名维度只保留首次出现的行（前端已按行去重，这里兜底恶意/脏请求）
+    if (seen.has(saleAttrName)) continue
+    seen.add(saleAttrName)
+    saleAttrs.push({
+      saleAttrName: saleAttrName.slice(0, SPU_LIMITS.SALE_ATTR_NAME_LENGTH),
+      saleAttrValueList: saleAttrValueList.slice(0, SPU_LIMITS.MAX_SALE_ATTR_VALUES),
+    })
+    if (saleAttrs.length >= SPU_LIMITS.MAX_SALE_ATTR_COUNT) break
+  }
+  return saleAttrs
+}
+
+// 平台属性名必须属于该三级分类已定义的属性，避免绕过前端自由塞属性名
+async function ensureAttrNamesValid(category3Id: string, attrs: ISpuAttr[]) {
+  if (attrs.length === 0) return
+  const known = new Set(
+    (await Attr.find({ categoryId: category3Id }).select('name').lean()).map((attr) => attr.name),
+  )
+  const unknown = attrs.filter((attr) => !known.has(attr.attrName)).map((attr) => attr.attrName)
+  if (unknown.length > 0) {
+    throw AppError.badRequest(`平台属性不存在：${unknown.join('、')}`)
+  }
+}
+
+// 更新场景的宽松校验：属性名 ∈ (原快照 ∪ 当前分类属性集合)
+// 快照里「属性管理中已删除」的行允许保留（快照语义），但仍拒绝凭空捏造的名字
+function ensureAttrNamesValidOnUpdate(
+  snapshotAttrList: ISpuAttr[],
+  category3Id: string,
+  attrs: ISpuAttr[],
+) {
+  if (attrs.length === 0) return
+  return ensureAttrNamesValid(
+    category3Id,
+    attrs.filter((attr) => !snapshotAttrList.some((snap) => snap.attrName === attr.attrName)),
+  )
+}
+
+// 销售属性维度名必须来自基础销售属性字典，避免自由文本污染维度集合
+async function ensureSaleAttrNamesValid(saleAttrs: ISpuSaleAttr[]) {
+  if (saleAttrs.length === 0) return
+  const known = new Set(
+    (await BaseSaleAttr.find().select('name').lean()).map((saleAttr) => saleAttr.name),
+  )
+  const unknown = saleAttrs
+    .filter((saleAttr) => !known.has(saleAttr.saleAttrName))
+    .map((saleAttr) => saleAttr.saleAttrName)
+  if (unknown.length > 0) {
+    throw AppError.badRequest(`销售属性不存在：${unknown.join('、')}`)
+  }
+}
+
+// 分页列表（keyword 为空时不加正则条件）
+export async function listSpus({ category3Id, page, pageSize, keyword }: ListSpusParams) {
+  await ensureCategory3(category3Id)
+
+  const filter: { category3Id: string; name?: { $regex: string; $options: string } } = {
+    category3Id,
+  }
+  if (keyword) {
+    // 转义后作为字面量匹配：用户输入 `(` 等字符时不会破坏正则语法
+    filter.name = { $regex: escapeRegExp(keyword), $options: 'i' }
+  }
+
+  const safePage = Math.max(1, Math.floor(page))
+  const safePageSize = Math.min(100, Math.max(1, Math.floor(pageSize)))
+
+  const [list, total] = await Promise.all([
+    Spu.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((safePage - 1) * safePageSize)
+      .limit(safePageSize),
+    Spu.countDocuments(filter),
+  ])
+
+  return { list: list.map(toSpuDTO), total }
+}
+
+export interface CreateSpuParams {
+  name: string
+  description?: string
+  brandId: string
+  category3Id: string
+  imageList?: unknown
+  attrList?: unknown
+  saleAttrList?: unknown
+}
+
+export async function createSpu(params: CreateSpuParams) {
+  const name = params.name.trim()
+  if (!name) {
+    throw AppError.badRequest('SPU 名称不能为空')
+  }
+
+  await ensureBrand(params.brandId)
+  await ensureCategory3(params.category3Id)
+
+  const imageList = normalizeImageList(params.imageList)
+  const attrList = normalizeAttrList(params.attrList)
+  const saleAttrList = normalizeSaleAttrList(params.saleAttrList)
+  await ensureAttrNamesValid(params.category3Id, attrList)
+  await ensureSaleAttrNamesValid(saleAttrList)
+
+  try {
+    const spu = await Spu.create({
+      name,
+      description: cleanString(params.description) ?? '',
+      brandId: params.brandId,
+      category3Id: params.category3Id,
+      imageList,
+      attrList,
+      saleAttrList,
+    })
+    return toSpuDTO(spu)
+  } catch (err) {
+    if (isDuplicateKeyError(err)) {
+      throw AppError.conflict('SPU 名称已存在')
+    }
+    throw err
+  }
+}
+
+// 更新走白名单
+export async function updateSpu(id: string, updates: Record<string, unknown>) {
+  const patch: Record<string, unknown> = {}
+
+  // 分类比对与属性名校验都要当前文档：惰性取一次，两处共用（避免重复查库）
+  type CurrentSpu = { category3Id: unknown; attrList: ISpuAttr[] }
+  let current: CurrentSpu | undefined // 不缓存"没查到"：直接抛 404，避免 null 在调用处需要二次收窄
+  const loadCurrent = async (): Promise<CurrentSpu> => {
+    if (current === undefined) {
+      const found = await Spu.findById(id).select('category3Id attrList').lean()
+      if (!found) {
+        throw AppError.notFound('SPU 不存在')
+      }
+      current = found
+    }
+    return current
+  }
+
+  if (updates.name !== undefined) {
+    if (typeof updates.name !== 'string' || !updates.name.trim()) {
+      throw AppError.badRequest('SPU 名称不能为空')
+    }
+    patch.name = updates.name.trim()
+  }
+
+  if (updates.description !== undefined) {
+    if (typeof updates.description !== 'string') {
+      throw AppError.badRequest('SPU 描述格式不合法')
+    }
+    patch.description = updates.description.trim()
+  }
+
+  if (updates.brandId !== undefined) {
+    if (typeof updates.brandId !== 'string' || !updates.brandId) {
+      throw AppError.badRequest('品牌不能为空')
+    }
+    await ensureBrand(updates.brandId)
+    patch.brandId = updates.brandId
+  }
+
+  if (updates.category3Id !== undefined) {
+    if (typeof updates.category3Id !== 'string' || !updates.category3Id) {
+      throw AppError.badRequest('三级分类不能为空')
+    }
+
+    const { category3Id } = await loadCurrent()
+    if (String(category3Id) !== updates.category3Id) {
+      throw AppError.badRequest('不支持修改所属分类')
+    }
+  }
+
+  if (updates.imageList !== undefined) {
+    if (!Array.isArray(updates.imageList)) {
+      throw AppError.badRequest('图片列表格式不合法')
+    }
+    patch.imageList = normalizeImageList(updates.imageList)
+  }
+
+  if (updates.attrList !== undefined) {
+    if (!Array.isArray(updates.attrList)) {
+      throw AppError.badRequest('属性列表格式不合法')
+    }
+    const attrList = normalizeAttrList(updates.attrList)
+
+    // 允许保留「属性管理中已删除」的历史快照行
+    const snapshot = await loadCurrent()
+    await ensureAttrNamesValidOnUpdate(snapshot.attrList, String(snapshot.category3Id), attrList)
+    patch.attrList = attrList
+  }
+
+  if (updates.saleAttrList !== undefined) {
+    if (!Array.isArray(updates.saleAttrList)) {
+      throw AppError.badRequest('销售属性列表格式不合法')
+    }
+    const saleAttrList = normalizeSaleAttrList(updates.saleAttrList)
+    await ensureSaleAttrNamesValid(saleAttrList)
+    patch.saleAttrList = saleAttrList
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw AppError.badRequest('没有需要更新的字段')
+  }
+
+  const spu = await Spu.findByIdAndUpdate(id, patch, {
+    returnDocument: 'after',
+    runValidators: true,
+  }).catch((err) => {
+    if (isDuplicateKeyError(err)) {
+      throw AppError.conflict('SPU 名称已存在')
+    }
+    throw err
+  })
+  if (!spu) {
+    throw AppError.notFound('SPU 不存在')
+  }
+  return toSpuDTO(spu)
+}
+
+export async function deleteSpu(id: string) {
+  const spu = await Spu.findByIdAndDelete(id)
+  if (!spu) {
+    throw AppError.notFound('SPU 不存在')
+  }
+}

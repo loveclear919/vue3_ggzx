@@ -8,6 +8,7 @@ const router = Router()
 router.use(auth)
 
 router.get('/', brandController.listBrands)
+router.get('/all', brandController.listAllBrands)
 router.post('/', brandController.createBrand)
 router.patch('/:id', brandController.updateBrand)
 router.delete('/:id', brandController.deleteBrand)

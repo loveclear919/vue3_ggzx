@@ -5,6 +5,7 @@ import type {
   Router,
 } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { LAST_VISITED_KEY } from '@/utils/storage'
 import { isAxiosError } from 'axios'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
@@ -22,7 +23,7 @@ export const authGuard: NavigationGuardWithThis<undefined> = async (to) => {
 
   // 已登录 不再返回登录页
   if (to.path === '/login' && userStore.token) {
-    return localStorage.getItem('lastVisitedPath') || '/'
+    return localStorage.getItem(LAST_VISITED_KEY) || '/'
   }
   // 白名单直接放行
   if (whiteList.includes(to.path)) {
@@ -52,7 +53,7 @@ export const authGuard: NavigationGuardWithThis<undefined> = async (to) => {
 export const trackLastVisited: NavigationHookAfter = (to, _from, failure) => {
   if (failure) return // 导航失败不记录
   if (!UNTRACKED_PATHS.includes(to.path)) {
-    localStorage.setItem('lastVisitedPath', to.fullPath)
+    localStorage.setItem(LAST_VISITED_KEY, to.fullPath)
   }
 }
 

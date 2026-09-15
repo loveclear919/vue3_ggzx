@@ -1,4 +1,7 @@
-export const menuRoutes = [
+import type { RouteRecordRaw } from 'vue-router'
+
+// 菜单路由（挂在 layout 下，权限管理动工后由后端下发并在此过滤）
+export const menuRoutes: RouteRecordRaw[] = [
   {
     path: '/home',
     name: 'home',

@@ -20,6 +20,9 @@ const userSchema = new mongoose.Schema<IUser>(
       required: [true, '用户名不能为空'],
       unique: true,
       trim: true,
+      // 长度边界与前端注册表单对齐（3-20）：后端兜底，绕过前端直调 API 也在模型层被拦
+      minlength: [3, '用户名长度 3-20 个字符'],
+      maxlength: [20, '用户名长度 3-20 个字符'],
     },
 
     password: {
@@ -75,7 +78,7 @@ export const User = mongoose.model<IUser>('User', userSchema)
 // 对外返回的用户数据 — 隐藏 password，_id 映射为 userId
 export function toUserDTO(user: IUser & { _id: unknown }) {
   return {
-    userId: user._id,
+    userId: String(user._id),
     username: user.username,
     avatar: user.avatar,
     desc: user.desc,

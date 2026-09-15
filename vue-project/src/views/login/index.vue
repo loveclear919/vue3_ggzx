@@ -82,13 +82,15 @@ const login = async () => {
 
   try {
     await userStore.login(loginForm.username, loginForm.password)
+    // 支持路由守卫传来的 redirect 参数，登录后跳回原页面
+    const redirect = typeof $route.query.redirect === 'string' ? $route.query.redirect : '/'
+    // 先跳转、后问候：await 等导航完成（含异步路由组件加载、页面挂载），
+    // 慢网速下问候弹窗也在页面渲染完之后才登场，而不是对着白屏一闪而过
+    await $router.push(redirect)
     ElNotification.success({
       title: `${getTimePeriod()}好!`,
       message: `欢迎回来，${loginForm.username}!`,
     })
-    // 支持路由守卫传来的 redirect 参数，登录后跳回原页面
-    const redirect = ($route.query.redirect as string) || '/'
-    $router.push(redirect)
   } catch {
     // ② 绕过前端的请求由后端兜底，错误提示已由响应拦截器弹出
   }

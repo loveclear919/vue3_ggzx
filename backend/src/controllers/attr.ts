@@ -26,7 +26,11 @@ export async function createAttr(req: Request, res: Response) {
   if (!name || typeof name !== 'string') {
     throw AppError.badRequest('属性名称不能为空')
   }
-  if (!Array.isArray(values) || values.length === 0 || !values.every((v) => typeof v === 'string')) {
+  if (
+    !Array.isArray(values) ||
+    values.length === 0 ||
+    !values.every((v) => typeof v === 'string')
+  ) {
     throw AppError.badRequest('属性值不能为空且必须为字符串数组')
   }
 

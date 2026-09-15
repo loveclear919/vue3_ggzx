@@ -1,5 +1,5 @@
 // 商品三级分类种子数据
-// 用法：pnpm --filter backend run seed（幂等：先清空再写入，仅用于开发环境）
+// 用法：pnpm --filter backend run seed（幂等：按自然键 upsert，_id 稳定，可重复执行）
 import 'dotenv/config'
 import mongoose from 'mongoose'
 import { Category } from '../src/models/Category.js'

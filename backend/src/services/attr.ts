@@ -1,4 +1,4 @@
-import { Attr, toAttrDTO } from '../models/Attr.js'
+import { Attr, ATTR_LIMITS, toAttrDTO } from '../models/Attr.js'
 import { Category } from '../models/Category.js'
 import { AppError } from '../utils/AppError.js'
 import { isDuplicateKeyError } from '../utils/mongoError.js'
@@ -10,17 +10,13 @@ function normalizeValues(values: string[]): string[] {
   return [...new Set(values.map((v) => v.trim()).filter(Boolean))]
 }
 
-// 边界校验：与模型 validator 对齐
-const MAX_VALUE_LENGTH = 30
-const MAX_VALUES_COUNT = 20
-
-// 检查属性值的数量和长度是否符合要求
+// 边界校验：数字统一从模型导出（单一来源），service 只负责给出更明确的 400 文案
 function assertValuesBoundary(values: string[]) {
-  if (values.length > MAX_VALUES_COUNT) {
-    throw AppError.badRequest(`属性值最多 ${MAX_VALUES_COUNT} 个`)
+  if (values.length > ATTR_LIMITS.MAX_VALUES_COUNT) {
+    throw AppError.badRequest(`属性值最多 ${ATTR_LIMITS.MAX_VALUES_COUNT} 个`)
   }
-  if (values.some((v) => v.length > MAX_VALUE_LENGTH)) {
-    throw AppError.badRequest(`属性值长度不能超过 ${MAX_VALUE_LENGTH} 个字符`)
+  if (values.some((v) => v.length > ATTR_LIMITS.VALUE_LENGTH)) {
+    throw AppError.badRequest(`属性值长度不能超过 ${ATTR_LIMITS.VALUE_LENGTH} 个字符`)
   }
 }
 
@@ -103,15 +99,16 @@ export async function updateAttr(id: string, updates: Record<string, unknown>) {
     throw AppError.badRequest('没有需要更新的字段')
   }
 
-  const attr = await Attr.findByIdAndUpdate(id, patch, { returnDocument: 'after', runValidators: true }).catch(
-    (err) => {
-      // 改名撞上同分类已有属性名
-      if (isDuplicateKeyError(err)) {
-        throw AppError.conflict('该分类下已存在同名属性')
-      }
-      throw err
-    },
-  )
+  const attr = await Attr.findByIdAndUpdate(id, patch, {
+    returnDocument: 'after',
+    runValidators: true,
+  }).catch((err) => {
+    // 改名撞上同分类已有属性名
+    if (isDuplicateKeyError(err)) {
+      throw AppError.conflict('该分类下已存在同名属性')
+    }
+    throw err
+  })
   if (!attr) {
     throw AppError.notFound('属性不存在')
   }

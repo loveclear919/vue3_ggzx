@@ -157,7 +157,7 @@ onMounted(fetchBrandList)
     <!-- 工具栏 -->
     <el-button type="primary" size="large" :icon="Plus" @click="handleAdd">添加品牌</el-button>
     <!-- 表格 -->
-    <el-table style="margin: 15px auto" border stripe :data="tableData" v-loading="loading">
+    <el-table class="brand-table" border stripe :data="tableData" v-loading="loading">
       <el-table-column label="序号" width="80" align="center">
         <template #default="scope">
           <span>{{ (pageNo - 1) * limit + scope.$index + 1 }}</span>
@@ -171,11 +171,10 @@ onMounted(fetchBrandList)
       <el-table-column label="品牌LOGO">
         <template #default="scope">
           <!-- logoUrl 为空时展示占位，不显示破图 -->
-          <!-- display:block 覆盖 EP 默认的 inline-block：消除行框基线下方空隙，行高与占位行一致 -->
           <el-image
             v-if="scope.row.logoUrl"
             :src="scope.row.logoUrl"
-            style="width: 80px; height: 80px; display: block"
+            class="brand-logo-img"
             fit="cover"
           />
           <div v-else class="logo-placeholder">暂无LOGO</div>
@@ -212,7 +211,8 @@ onMounted(fetchBrandList)
       @size-change="handleSizeChange"
     />
     <!-- 新增 / 编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="480px">
+    <!-- append-to-body：脱离内容区 z-index:0 的层叠上下文，弹窗才能压过顶部导航（z-index:100） -->
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="480px" append-to-body>
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px">
         <el-form-item label="品牌名称" prop="name">
           <el-input
@@ -248,6 +248,17 @@ onMounted(fetchBrandList)
 </template>
 
 <style scoped lang="scss">
+.brand-table {
+  margin: 15px auto;
+}
+
+// display:block 覆盖 EP 默认的 inline-block：消除行框基线下方空隙，行高与占位行一致
+.brand-logo-img {
+  width: 80px;
+  height: 80px;
+  display: block;
+}
+
 .logo-placeholder {
   display: flex;
   align-items: center;

@@ -15,6 +15,9 @@ const BASE_URL = '/brand'
 export const getBrandList = (params: BrandListParams) =>
   request.get<BrandListResponse>(BASE_URL, { params })
 
+// 全量品牌（SPU 表单的品牌下拉用）
+export const getAllBrands = () => request.get<BrandInfo[]>(`${BASE_URL}/all`)
+
 // 新增品牌
 export const createBrand = (data: CreateBrandRequest) => request.post<BrandInfo>(BASE_URL, data)
 

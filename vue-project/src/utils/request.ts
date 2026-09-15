@@ -1,5 +1,6 @@
 import axios, { type AxiosRequestConfig } from 'axios'
 import router from '@/router'
+import { TOKEN_KEY } from '@/utils/storage'
 
 // ElMessage 由 unplugin-auto-import 按需注入（含样式），无需手动导入
 
@@ -11,7 +12,7 @@ const request = axios.create({
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem(TOKEN_KEY)
 
     if (token) {
       config.headers.set('Authorization', `Bearer ${token}`)
@@ -41,7 +42,7 @@ request.interceptors.response.use(
     const backendMsg = error.response?.data?.message
 
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
+      localStorage.removeItem(TOKEN_KEY)
       ElMessage.error(backendMsg || '登录已过期，请重新登录')
       router.push('/login')
     } else {
@@ -54,7 +55,6 @@ request.interceptors.response.use(
 )
 
 // HTTP 封装
-// 默认泛型用 unknown 而非 any：不声明类型的调用拿到 unknown，必须显式处理才能用
 const http = {
   get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
     return request.get(url, config) as Promise<T>

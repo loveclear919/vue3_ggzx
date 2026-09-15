@@ -1,5 +1,6 @@
 import { Brand, toBrandDTO } from '../models/Brand.js'
 import { AppError } from '../utils/AppError.js'
+import { escapeRegExp } from '../utils/escapeRegExp.js'
 import { isDuplicateKeyError } from '../utils/mongoError.js'
 
 // 业务层：品牌管理（分页列表 / 新增 / 更新 / 删除）
@@ -16,7 +17,8 @@ export async function listBrands({ page, pageSize, keyword }: ListBrandsParams) 
   // 内联类型即可（mongoose 9 将 FilterQuery 重构为 QueryFilter 且未从入口导出）
   const filter: { name?: { $regex: string; $options: string } } = {}
   if (keyword) {
-    filter.name = { $regex: keyword, $options: 'i' }
+    // 转义后作为字面量匹配：用户输入 `(` 等字符时不会破坏正则语法
+    filter.name = { $regex: escapeRegExp(keyword), $options: 'i' }
   }
 
   // 防御：非法页码/页大小规范化（0、负数、超大 pageSize 都不击穿查询）
@@ -33,6 +35,12 @@ export async function listBrands({ page, pageSize, keyword }: ListBrandsParams) 
   ])
 
   return { list: list.map(toBrandDTO), total }
+}
+
+// 全量品牌（SPU 表单的品牌下拉用）：不分页，按创建时间升序
+export async function listAllBrands() {
+  const list = await Brand.find().sort({ createdAt: 1 })
+  return list.map(toBrandDTO)
 }
 
 // 新增
@@ -71,15 +79,16 @@ export async function updateBrand(id: string, updates: Record<string, unknown>) 
 
   // catch 只负责「数据库错误 → 409」的转换；notFound 是正常流程判断，留在 try 外面
   // new: 返回更新后的文档；runValidators: 走模型校验
-  const brand = await Brand.findByIdAndUpdate(id, patch, { returnDocument: 'after', runValidators: true }).catch(
-    (err) => {
-      // 改成已存在的品牌名 → 唯一索引冲突
-      if (isDuplicateKeyError(err)) {
-        throw AppError.conflict('品牌名称已存在')
-      }
-      throw err
-    },
-  )
+  const brand = await Brand.findByIdAndUpdate(id, patch, {
+    returnDocument: 'after',
+    runValidators: true,
+  }).catch((err) => {
+    // 改成已存在的品牌名 → 唯一索引冲突
+    if (isDuplicateKeyError(err)) {
+      throw AppError.conflict('品牌名称已存在')
+    }
+    throw err
+  })
   if (!brand) {
     throw AppError.notFound('品牌不存在')
   }

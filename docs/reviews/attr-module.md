@@ -1,5 +1,9 @@
 # 属性管理模块 · 架构复盘
 
+> ⚠️ **历史决策记录（保留写作时的原貌，勿据此实现）**：本文档记录的是「全量分类树 + el-tree」时期的形态。
+> 分类选择已改造为**逐级下钻**，`listCategoryTree` / `getTree` / `GET /api/category/tree` / 前端 `getCategoryTree` 已整体删除。
+> 现行形态见 `docs/handbooks/attr-module.md`（实现手册）与 `docs/reviews/category-drilldown.md`（改造复盘）。
+
 > 按 `ai-roles/agent.md` 的「首席架构师 & 代码审查官」框架输出：业务全景 / 技术实现链路 / 架构决策分析 / 关键函数深度拆解 / 风险提示 / 重构建议。
 
 ## 1. 业务全景

@@ -23,7 +23,7 @@ export const iconMap: Record<string, Component> = {
   Goods, // 商品管理
   CollectionTag, // 品牌管理
   ChromeFilled, // 属性管理
-  Management, // 库存管理
+  Management, // SPU管理
   List, // SKU管理
 }
 

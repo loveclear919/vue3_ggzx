@@ -80,7 +80,7 @@ vue3_ggzx
 | ---------------------------------------- | ---------------------- |
 | `pnpm dev`                               | 并行启动前后端开发服务 |
 | `pnpm dev:frontend` / `pnpm dev:backend` | 单独启动前端 / 后端    |
-| `pnpm --filter backend run seed`         | 写入商品三级分类种子数据（幂等，先清空再写入） |
+| `pnpm --filter backend run seed`         | 写入种子数据：商品三级分类 + 基础销售属性（幂等，可重复执行） |
 
 在前端包（`vue-project/`）内：
 

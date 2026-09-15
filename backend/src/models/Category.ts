@@ -36,22 +36,3 @@ const categorySchema = new mongoose.Schema<ICategory>(
 categorySchema.index({ parentId: 1, name: 1 }, { unique: true })
 
 export const Category = mongoose.model<ICategory>('Category', categorySchema)
-
-// 树节点结构：对外返回时 _id 映射为 categoryId，children 由 service 层组装
-export interface CategoryNode {
-  categoryId: unknown
-  name: string
-  level: 1 | 2 | 3
-  parentId: unknown
-  children: CategoryNode[]
-}
-
-export function toCategoryNode(category: ICategory & { _id: unknown }): CategoryNode {
-  return {
-    categoryId: category._id,
-    name: category.name,
-    level: category.level,
-    parentId: category.parentId,
-    children: [],
-  }
-}

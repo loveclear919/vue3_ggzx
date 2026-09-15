@@ -9,12 +9,13 @@ export interface AuthRequest extends Request {
 
 export function auth(req: AuthRequest, _res: Response, next: NextFunction): void {
   const header = req.headers.authorization
+  const BEARER_PREFIX = 'Bearer '
 
-  if (!header || !header.startsWith('Bearer ')) {
+  if (!header || !header.startsWith(BEARER_PREFIX)) {
     throw AppError.unauthorized('未登录，请先登录')
   }
 
-  const token = header.slice(7)
+  const token = header.slice(BEARER_PREFIX.length)
   if (!token) {
     throw AppError.unauthorized('Token 无效')
   }

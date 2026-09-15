@@ -1,10 +1,9 @@
 // 商品分类接口
 import request from '@/utils/request'
-import type { CategoryNode } from './type'
+import type { CategoryFlatNode } from './type'
 
-enum Api {
-  TREE = '/category/tree',
-}
+const BASE_URL = '/category'
 
-// 获取三级分类树（用于属性管理、商品等模块的分类选择器）
-export const getCategoryTree = () => request.get<CategoryNode[]>(Api.TREE)
+// 平铺查询某父级下的子级（不传 parentId = 一级分类）：逐级下钻用，永远不渲染全量
+export const getCategoryChildren = (parentId?: string) =>
+  request.get<CategoryFlatNode[]>(BASE_URL, { params: { parentId } })

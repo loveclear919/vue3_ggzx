@@ -1,34 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { getCategoryTree } from '@/api/category'
-import type { CategoryNode } from '@/api/category/type'
+import CategoryDrilldown from '@/components/category/index.vue'
+import type { CategoryFlatNode } from '@/api/category/type'
 import { getAttrList, createAttr, updateAttr, deleteAttr } from '@/api/product/attr'
 import type { AttrInfo } from '@/api/product/attr/type'
+import { ATTR_LIMITS } from './constants'
 
-// ---- 三级分类树（左侧） ----
-const categoryTree = ref<CategoryNode[]>([])
-const treeLoading = ref(false)
+// ---- 逐级下钻分类选择（左侧）：下钻逻辑抽离为全局组件 components/category，本页只响应选中 ----
 // 当前选中的三级分类（null = 未选择）
-const selectedCategory = ref<CategoryNode | null>(null)
+const selectedCategory = ref<CategoryFlatNode | null>(null)
 
-const fetchCategoryTree = async () => {
-  treeLoading.value = true
-  try {
-    categoryTree.value = await getCategoryTree()
-  } catch {
-    // 错误提示已由响应拦截器统一弹出
-  } finally {
-    treeLoading.value = false
-  }
-}
-
-// 点击树节点：只有三级分类挂属性
-const handleNodeClick = (node: CategoryNode) => {
-  if (node.level !== 3) {
-    return
-  }
+// 选中三级分类：查该分类下的属性列表
+const handleCategorySelect = (node: CategoryFlatNode) => {
   selectedCategory.value = node
   fetchAttrList()
 }
@@ -66,7 +51,11 @@ const newValue = ref('')
 const formRules: FormRules = {
   name: [
     { required: true, message: '请输入属性名称', trigger: 'blur' },
-    { max: 30, message: '属性名称不能超过 30 个字符', trigger: 'blur' },
+    {
+      max: ATTR_LIMITS.NAME_LENGTH,
+      message: `属性名称不能超过 ${ATTR_LIMITS.NAME_LENGTH} 个字符`,
+      trigger: 'blur',
+    },
   ],
   values: [
     { type: 'array', required: true, min: 1, message: '至少添加一个属性值', trigger: 'change' },
@@ -91,14 +80,9 @@ const handleEdit = (row: AttrInfo) => {
   dialogVisible.value = true
 }
 
-// 边界常量与后端对齐（service 断言 + 模型 validator）：单个值 ≤30 字符、最多 20 个值
-const MAX_VALUE_LENGTH = 30
-const MAX_VALUES_COUNT = 20
-
-// 添加属性值：去空白、去重、边界拦截（与后端规则对齐，输入时即拦）
 const addValue = () => {
-  if (form.values.length >= MAX_VALUES_COUNT) {
-    ElMessage.warning(`属性值最多 ${MAX_VALUES_COUNT} 个`)
+  if (form.values.length >= ATTR_LIMITS.MAX_VALUES_COUNT) {
+    ElMessage.warning(`属性值最多 ${ATTR_LIMITS.MAX_VALUES_COUNT} 个`)
     return
   }
   const value = newValue.value.trim()
@@ -161,29 +145,17 @@ const handleDelete = async (row: AttrInfo) => {
     // 失败提示由拦截器弹出
   }
 }
-
-onMounted(fetchCategoryTree)
 </script>
 <template>
   <!-- 单根容器：路由切换的 Transition 只能动画单根元素组件（多根 fragment 会警告且动画失效） -->
   <div class="attr-page">
     <el-row :gutter="20">
-      <!-- 左侧：三级分类树 -->
+      <!-- 左侧：逐级下钻分类选择（抽离为全局组件 components/category，本页只响应 select 事件） -->
       <el-col :span="6">
-        <el-card shadow="never">
-          <template #header>
-            <span class="card-title">三级分类</span>
-          </template>
-          <el-tree
-            :data="categoryTree"
-            :props="{ label: 'name', children: 'children' }"
-            node-key="categoryId"
-            highlight-current
-            default-expand-all
-            v-loading="treeLoading"
-            @node-click="handleNodeClick"
-          />
-        </el-card>
+        <CategoryDrilldown
+          :selected-id="selectedCategory?.categoryId"
+          @select="handleCategorySelect"
+        />
       </el-col>
 
       <!-- 右侧：属性列表 -->
@@ -217,11 +189,7 @@ onMounted(fetchCategoryTree)
             </el-table-column>
             <el-table-column label="属性值">
               <template #default="scope">
-                <el-tag
-                  v-for="value in scope.row.values"
-                  :key="value"
-                  style="margin: 2px 6px 2px 0"
-                >
+                <el-tag v-for="value in scope.row.values" :key="value" class="attr-value-tag">
                   {{ value }}
                 </el-tag>
               </template>
@@ -248,32 +216,46 @@ onMounted(fetchCategoryTree)
     </el-row>
 
     <!-- 新增 / 编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="560px">
+    <!-- append-to-body：脱离内容区 z-index:0 的层叠上下文，弹窗才能压过顶部导航（z-index:100） -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      width="560px"
+      append-to-body
+      destroy-on-close
+    >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px">
         <el-form-item label="属性名称" prop="name">
-          <el-input v-model="form.name" placeholder="如：颜色" maxlength="30" show-word-limit />
+          <el-input
+            v-model="form.name"
+            placeholder="如：颜色"
+            :maxlength="ATTR_LIMITS.NAME_LENGTH"
+            show-word-limit
+          />
         </el-form-item>
         <el-form-item label="属性值" prop="values">
           <div class="values-editor">
-            <el-tag
-              v-for="(value, index) in form.values"
-              :key="value"
-              closable
-              style="margin: 0 8px 8px 0"
-              @close="removeValue(index)"
-            >
-              {{ value }}
-            </el-tag>
-            <div>
+            <div class="values-tags">
+              <el-tag
+                v-for="(value, index) in form.values"
+                :key="value"
+                closable
+                class="values-tag"
+                @close="removeValue(index)"
+              >
+                {{ value }}
+              </el-tag>
+            </div>
+            <div class="values-input-row">
               <el-input
                 v-model="newValue"
                 placeholder="输入属性值，回车或点添加"
-                style="width: 350px"
-                :maxlength="MAX_VALUE_LENGTH"
+                class="value-input"
+                :maxlength="ATTR_LIMITS.VALUE_LENGTH"
                 show-word-limit
                 @keyup.enter="addValue"
               />
-              <el-button :icon="Plus" style="margin-left: 8px" @click="addValue">添加</el-button>
+              <el-button :icon="Plus" @click="addValue">添加</el-button>
             </div>
           </div>
         </el-form-item>
@@ -299,8 +281,30 @@ onMounted(fetchCategoryTree)
 }
 
 .values-editor {
+  /* 上下两段结构：标签区 + 输入区彻底分开，互不参与同一行的换行 */
+  display: block;
+}
+
+.values-tags {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+}
+
+.values-tag {
+  margin: 0 8px 8px 0;
+}
+
+.values-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.value-input {
+  /* 占满整行、随容器宽度自适应，不写死像素宽度 */
+  flex: 1;
+}
+
+.attr-value-tag {
+  margin: 2px 6px 2px 0;
 }
 </style>
