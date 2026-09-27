@@ -14,6 +14,9 @@ const BASE_URL = '/spu'
 export const getSpuList = (params: SpuListParams) =>
   request.get<SpuListResponse>(BASE_URL, { params })
 
+// SPU 详情（SKU 页刷新后取上下文：名称、销售属性快照、图片）
+export const getSpuById = (id: string) => request.get<SpuInfo>(`${BASE_URL}/${id}`)
+
 // 新增 SPU
 export const createSpu = (data: CreateSpuRequest) => request.post<SpuInfo>(BASE_URL, data)
 

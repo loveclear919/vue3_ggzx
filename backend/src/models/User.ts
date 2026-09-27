@@ -1,12 +1,17 @@
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 
+// phone 字段的校验规则：规则与字段定义同文件（按域归并，而非按「正则」技术归类），改字段时规则就在眼前。
+// 前端 vue-project/src/utils/phone.ts 有一份同值副本（语言不同无法共享），修改必须两边同步
+export const PHONE_REGEX = /^1[3-9]\d{9}$/
+
 export interface IUser {
   username: string
+  phone: string
   password: string
   avatar: string
   desc: string
-  roles: string[]
+  roles: mongoose.Types.ObjectId[]
   buttons: string[]
   routes: string[]
   createdAt: Date
@@ -20,9 +25,16 @@ const userSchema = new mongoose.Schema<IUser>(
       required: [true, '用户名不能为空'],
       unique: true,
       trim: true,
-      // 长度边界与前端注册表单对齐（3-20）：后端兜底，绕过前端直调 API 也在模型层被拦
       minlength: [3, '用户名长度 3-20 个字符'],
       maxlength: [20, '用户名长度 3-20 个字符'],
+    },
+
+    phone: {
+      type: String,
+      required: [true, '手机号不能为空'],
+      unique: true,
+      trim: true,
+      match: [PHONE_REGEX, '手机号格式不正确'],
     },
 
     password: {
@@ -47,8 +59,9 @@ const userSchema = new mongoose.Schema<IUser>(
     },
 
     roles: {
-      type: [String],
-      default: ['user'],
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: 'Role',
+      default: [],
     },
 
     buttons: {
@@ -80,10 +93,13 @@ export function toUserDTO(user: IUser & { _id: unknown }) {
   return {
     userId: String(user._id),
     username: user.username,
+    phone: user.phone,
     avatar: user.avatar,
     desc: user.desc,
-    roles: user.roles,
+    roles: user.roles.map(String),
     buttons: user.buttons,
     routes: user.routes,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   }
 }

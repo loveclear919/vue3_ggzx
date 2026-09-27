@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onActivated, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import CategoryDrilldown from '@/components/category/index.vue'
 import type { CategoryFlatNode } from '@/api/category/type'
@@ -10,6 +11,10 @@ import type { BaseSaleAttrInfo } from '@/api/product/baseSaleAttr/type'
 import { getSpuList, deleteSpu } from '@/api/product/spu'
 import type { SpuInfo } from '@/api/product/spu/type'
 import SpuFormDialog from './components/spu-form-dialog/index.vue'
+import { usePagedList } from '@/composables/usePagedList'
+import AppPagination from '@/components/pagination/index.vue'
+
+defineOptions({ name: 'Spu' })
 
 // ---- 逐级下钻分类选择（左侧）：下钻逻辑抽离为全局组件 components/category，本页只响应选中 ----
 const selectedCategory = ref<CategoryFlatNode | null>(null)
@@ -22,34 +27,36 @@ const handleCategorySelect = (node: CategoryFlatNode) => {
 }
 
 // ---- SPU 列表（右侧） ----
-const pageNo = ref(1)
-const limit = ref(10)
-const total = ref(0)
-const tableData = ref<SpuInfo[]>([])
-const loading = ref(false)
+// 分页三件套收口：usePagedList 持有状态 + 竞态防护 + 删空回退
+const {
+  list: tableData,
+  pageNo,
+  limit,
+  total,
+  loading,
+  load: loadSpuList,
+  reloadAfterDelete,
+  setPageSize,
+} = usePagedList((page, pageSize) =>
+  // 空值安全：不用非空断言 —— 断言若被绕过，错误会被 run() 静默吞掉变成无声失败
+  selectedCategory.value
+    ? getSpuList({ categoryId: selectedCategory.value.categoryId, page, pageSize })
+    : Promise.resolve({ list: [] as SpuInfo[], total: 0 }),
+)
 const emptyText = computed(() => (selectedCategory.value ? '暂无数据' : '请先在左侧选择三级分类'))
 
-const fetchSpuList = async () => {
-  if (!selectedCategory.value) return
-  loading.value = true
-  try {
-    const result = await getSpuList({
-      categoryId: selectedCategory.value.categoryId,
-      page: pageNo.value,
-      pageSize: limit.value,
-    })
-    tableData.value = result.list
-    total.value = result.total
-  } catch {
-    // 错误提示已由响应拦截器统一弹出
-  } finally {
-    loading.value = false
-  }
-}
+// keep-alive 激活时刷新：字典与列表都可能过期（缓存期间新增品牌/字典变更），返回时一并重拉。
+// 只用 onActivated：keep-alive 内组件的首次挂载同时触发 onMounted 与 onActivated，
+// 两个都挂会导致首次进入时字典请求重复
+onActivated(() => {
+  fetchOptions()
+  if (selectedCategory.value) fetchSpuList()
+})
 
-const handleSizeChange = () => {
-  pageNo.value = 1
-  fetchSpuList()
+// 拉取入口统一带「已选分类」守卫：fetcher 只会在选中后被调用
+const fetchSpuList = () => {
+  if (!selectedCategory.value) return
+  loadSpuList()
 }
 
 // ---- 下拉数据（品牌 / 基础销售属性字典，供弹窗组件使用） ----
@@ -101,6 +108,12 @@ const handleDialogSuccess = () => {
   fetchSpuList()
 }
 
+// ---- 跳转 SKU 页（query 携带 spuId，SKU 页凭它自洽：刷新/直链都可用） ----
+const router = useRouter()
+const handleGoSku = (row: SpuInfo) => {
+  router.push({ path: '/product/spu/sku', query: { spuId: row.spuId } })
+}
+
 // ---- 删除 ----
 const handleDelete = async (row: SpuInfo) => {
   try {
@@ -116,20 +129,15 @@ const handleDelete = async (row: SpuInfo) => {
   try {
     await deleteSpu(row.spuId)
     ElMessage.success('删除成功')
-    if (tableData.value.length === 1 && pageNo.value > 1) {
-      pageNo.value--
-    }
-    fetchSpuList()
+    // 本页删空且非第 1 页 → 回退一页再拉（reloadAfterDelete 内置该编排）
+    await reloadAfterDelete()
   } catch {
     // 失败提示由拦截器弹出
   }
 }
-
-onMounted(fetchOptions)
 </script>
 
 <template>
-  <!-- 单根容器：路由切换的 Transition 只能动画单根元素组件 -->
   <div class="spu-page">
     <el-row :gutter="20">
       <!-- 左侧：逐级下钻分类选择（抽离为全局组件 components/category，本页只响应 select 事件） -->
@@ -159,7 +167,14 @@ onMounted(fetchOptions)
             </div>
           </template>
 
-          <el-table :data="tableData" border stripe v-loading="loading" :empty-text="emptyText">
+          <el-table
+            :data="tableData"
+            border
+            stripe
+            v-loading="loading"
+            :empty-text="emptyText"
+            row-key="spuId"
+          >
             <el-table-column label="序号" width="70" align="center">
               <template #default="scope">
                 <span>{{ (pageNo - 1) * limit + scope.$index + 1 }}</span>
@@ -191,7 +206,7 @@ onMounted(fetchOptions)
                 <span v-else class="no-image">无图</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="150" align="center">
+            <el-table-column label="操作" width="190" align="center">
               <template #default="scope">
                 <el-button
                   type="primary"
@@ -205,26 +220,24 @@ onMounted(fetchOptions)
                   :icon="Delete"
                   @click="handleDelete(scope.row as SpuInfo)"
                 ></el-button>
+                <el-button type="primary" link @click="handleGoSku(scope.row as SpuInfo)"
+                  >SKU</el-button
+                >
               </template>
             </el-table-column>
           </el-table>
 
-          <el-pagination
-            v-model:current-page="pageNo"
-            v-model:page-size="limit"
-            :page-sizes="[5, 10, 20, 50]"
-            background
-            size="large"
-            layout="prev, pager, next, jumper, ->, sizes, total"
+          <AppPagination
+            v-model:page="pageNo"
+            v-model:size="limit"
             :total="total"
             class="spu-pagination"
             @current-change="fetchSpuList"
-            @size-change="handleSizeChange"
+            @size-change="setPageSize"
           />
         </el-card>
       </el-col>
     </el-row>
-
     <!-- 新增 / 编辑弹窗：表单与校验在子组件，成功事件驱动列表刷新 -->
     <SpuFormDialog
       v-if="selectedCategory"
@@ -250,14 +263,15 @@ onMounted(fetchOptions)
   justify-content: space-between;
 }
 
+.no-image {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+// 分页器间距由父级控制（class 透传到 AppPagination 根元素）
 .spu-pagination {
   margin-top: 15px;
   justify-content: flex-end;
-}
-
-.no-image {
-  font-size: 12px;
-  color: #909399;
 }
 
 // display:block 覆盖 EP 默认的 inline-block：消除行框基线下方空隙，行高与「无图」占位行一致

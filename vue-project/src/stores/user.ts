@@ -19,15 +19,15 @@ export const useUserStore = defineStore('user', () => {
   const isLoggedIn = computed(() => !!token.value)
 
   // ---- actions ----
-  async function login(username: string, password: string) {
-    const res = await loginApi({ username, password })
+  async function login(phone: string, password: string) {
+    const res = await loginApi({ phone, password })
     token.value = res.token
     localStorage.setItem(TOKEN_KEY, res.token)
     userInfo.value = res.user
   }
 
-  async function register(username: string, password: string) {
-    await registerApi({ username, password })
+  async function register(phone: string, password: string) {
+    await registerApi({ phone, password })
   }
 
   async function fetchUserInfo() {

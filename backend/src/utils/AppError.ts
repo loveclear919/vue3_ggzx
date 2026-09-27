@@ -31,4 +31,7 @@ export class AppError extends Error {
   static tooManyRequests(message = '请求过于频繁，请稍后再试') {
     return new AppError(429, message)
   }
+  static internal(message = '服务器内部错误') {
+    return new AppError(500, message)
+  }
 }

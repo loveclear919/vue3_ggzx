@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SpuAttrForm } from '../types'
+import type { SpuAttrForm } from '../../types'
 
 // 平台属性行编辑器：属性名展示 + 属性值候选下拉（values 作候选，allow-create 可填列表外新值）
 const model = defineModel<SpuAttrForm[]>({ required: true })
@@ -39,7 +39,7 @@ defineProps<{ loading?: boolean }>()
     width: 90px;
     padding-right: 12px;
     text-align: right;
-    color: #606266;
+    color: var(--el-text-color-regular);
   }
 
   .platform-attr-value {

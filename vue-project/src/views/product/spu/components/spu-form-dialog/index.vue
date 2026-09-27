@@ -6,11 +6,11 @@ import { createSpu, updateSpu } from '@/api/product/spu'
 import type { SpuInfo, SpuImage, SpuSaleAttr } from '@/api/product/spu/type'
 import type { BrandInfo } from '@/api/product/trademark/type'
 import type { BaseSaleAttrInfo } from '@/api/product/baseSaleAttr/type'
-import ImageUploader from '../image-uploader/index.vue'
+import ImageUploader from '@/components/image-uploader/index.vue'
 import PlatformAttrEditor from '../platform-attr-editor/index.vue'
 import SaleAttrEditor from '../sale-attr-editor/index.vue'
-import type { SpuAttrForm } from '../types'
-import { SPU_LIMITS } from '../constants'
+import type { SpuAttrForm } from '../../types.ts'
+import { SPU_LIMITS } from '../../constants.ts'
 
 // SPU 新增/编辑弹窗：持有表单数据与提交逻辑，子编辑器（图片/平台属性/销售属性）只做展示与 v-model 回传
 const props = defineProps<{
@@ -270,7 +270,7 @@ const handleSubmit = async () => {
 
       <el-divider content-position="left">SPU图片</el-divider>
       <el-form-item label="图片">
-        <ImageUploader v-model="form.imageList" />
+        <ImageUploader v-model="form.imageList" :max="SPU_LIMITS.MAX_IMAGE_COUNT" />
       </el-form-item>
 
       <!-- divider 已是分区标题，不再用 form-item label（避免 label 列 + 行内名称双重缩进） -->

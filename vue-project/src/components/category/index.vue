@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { getCategoryChildren } from '@/api/category'
 import type { CategoryFlatNode } from '@/api/category/type'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 
 // 逐级下钻分类选择器：永远只渲染当前层级的平铺列表（分类再多也不撑爆视图）
 // 使用方只关心「选中了哪个三级分类」：@select 事件；selectedId 用于回显高亮
@@ -13,17 +14,12 @@ const emit = defineEmits<{ select: [node: CategoryFlatNode] }>()
 const categoryPath = ref<CategoryFlatNode[]>([])
 // 当前层级的平铺列表
 const categoryLevelList = ref<CategoryFlatNode[]>([])
-const treeLoading = ref(false)
+// 层级拉取（只认最后一次请求，防快速连点的竞态）
+const { loading: treeLoading, run: runCategoryLevel } = useLatestRequest()
 
 const fetchCategoryLevel = async (parentId?: string) => {
-  treeLoading.value = true
-  try {
-    categoryLevelList.value = await getCategoryChildren(parentId)
-  } catch {
-    // 错误提示已由响应拦截器统一弹出
-  } finally {
-    treeLoading.value = false
-  }
+  const list = await runCategoryLevel(() => getCategoryChildren(parentId))
+  if (list !== undefined) categoryLevelList.value = list
 }
 
 // 点击分类项：一级/二级下钻看子级，三级选中并向外抛 select
@@ -110,7 +106,7 @@ onMounted(fetchCategoryLevel)
   justify-content: space-between;
   padding: 8px 12px;
   font-size: 14px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   border-radius: 4px;
   cursor: pointer;
 
@@ -125,7 +121,7 @@ onMounted(fetchCategoryLevel)
   }
 
   .category-item-arrow {
-    color: #c0c4cc;
+    color: var(--el-text-color-disabled);
   }
 }
 </style>

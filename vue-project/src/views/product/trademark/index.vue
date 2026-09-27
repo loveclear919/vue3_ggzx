@@ -1,37 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
-import type { FormInstance, FormRules, UploadRequestHandler, UploadProps } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import { getBrandList, createBrand, updateBrand, deleteBrand } from '@/api/product/trademark'
-import { uploadFile } from '@/api/upload'
 import type { BrandInfo } from '@/api/product/trademark/type'
+import { usePagedList } from '@/composables/usePagedList'
+import AppPagination from '@/components/pagination/index.vue'
+import ImageUploader from '@/components/image-uploader/index.vue'
 
-// ---- 列表查询状态 ----
-const pageNo = ref(1)
-const limit = ref(10)
-const total = ref(0)
-const tableData = ref<BrandInfo[]>([])
-const loading = ref(false)
-
-// 拉取当前页数据：翻页 = 改状态重新查
-const fetchBrandList = async () => {
-  loading.value = true
-  try {
-    const result = await getBrandList({ page: pageNo.value, pageSize: limit.value })
-    tableData.value = result.list
-    total.value = result.total
-  } catch {
-    // 错误提示已由响应拦截器统一弹出，这里只负责让 loading 收尾
-  } finally {
-    loading.value = false
-  }
-}
-
-// 切换每页条数：回到第 1 页再查（页容量变化后原页码可能越界）
-const handleSizeChange = () => {
-  pageNo.value = 1
-  fetchBrandList()
-}
+// ---- 列表查询状态（分页三件套收口：usePagedList 持有状态 + 竞态防护 + 删空回退） ----
+const {
+  list: tableData,
+  pageNo,
+  limit,
+  total,
+  loading,
+  load: fetchBrandList,
+  reloadAfterDelete,
+  setPageSize,
+} = usePagedList((page, pageSize) => getBrandList({ page, pageSize }))
 
 // ---- 新增 / 编辑（共用一个弹窗） ----
 const dialogVisible = ref(false)
@@ -91,39 +78,14 @@ const handleSubmit = async () => {
   }
 }
 
-// ---- 图片上传（选完即传，URL 存进表单；提交时随品牌一起保存） ----
-const uploading = ref(false)
-
-// 上传前客户端校验（与后端 multer 白名单一致，双重防线）
-const beforeUpload: UploadProps['beforeUpload'] = (rawFile) => {
-  if (!rawFile.type.startsWith('image/')) {
-    ElMessage.error('仅支持图片文件')
-    return false
-  } else if (rawFile.size / 1024 / 1024 > 2) {
-    ElMessage.error('图片大小不能超过 2MB')
-    return false
-  }
-  return true
-}
-
-// 自定义上传
-const handleUpload: UploadRequestHandler = async (options) => {
-  uploading.value = true
-  try {
-    const formData = new FormData()
-    formData.append('file', options.file)
-    const res = await uploadFile(formData)
-    form.logoUrl = res.url
-    // 必须调 onSuccess 通知组件，否则内部文件状态永远停留在 uploading
-    options.onSuccess(res)
-    ElMessage.success('上传成功')
-  } catch (error) {
-    // 运行时仅记录错误对象，never 断言只为满足类型
-    options.onError(error as never)
-  } finally {
-    uploading.value = false
-  }
-}
+// ---- 图片上传：复用全局 ImageUploader（选完即传，URL 存进表单；提交时随品牌一起保存） ----
+// ImageUploader 的模型是图片数组；品牌 LOGO 最多 1 张，用「数组 ↔ 单值」桥接
+const logoImages = computed<{ imageUrl: string; imageName: string }[]>({
+  get: () => (form.logoUrl ? [{ imageUrl: form.logoUrl, imageName: '' }] : []),
+  set: (val) => {
+    form.logoUrl = val[0]?.imageUrl ?? ''
+  },
+})
 
 // ---- 删除 ----
 const handleDelete = async (row: BrandInfo) => {
@@ -140,11 +102,8 @@ const handleDelete = async (row: BrandInfo) => {
   try {
     await deleteBrand(row.brandId)
     ElMessage.success('删除成功')
-    // 当前页删空了且不是第 1 页 → 回退一页，避免停在空白页
-    if (tableData.value.length === 1 && pageNo.value > 1) {
-      pageNo.value--
-    }
-    fetchBrandList()
+    // 本页删空且非第 1 页 → 回退一页再拉（reloadAfterDelete 内置该编排）
+    await reloadAfterDelete()
   } catch {
     // 失败提示由拦截器弹出（如 404 品牌不存在）
   }
@@ -157,7 +116,14 @@ onMounted(fetchBrandList)
     <!-- 工具栏 -->
     <el-button type="primary" size="large" :icon="Plus" @click="handleAdd">添加品牌</el-button>
     <!-- 表格 -->
-    <el-table class="brand-table" border stripe :data="tableData" v-loading="loading">
+    <el-table
+      class="brand-table"
+      border
+      stripe
+      :data="tableData"
+      v-loading="loading"
+      row-key="brandId"
+    >
       <el-table-column label="序号" width="80" align="center">
         <template #default="scope">
           <span>{{ (pageNo - 1) * limit + scope.$index + 1 }}</span>
@@ -199,20 +165,23 @@ onMounted(fetchBrandList)
       </el-table-column>
     </el-table>
     <!-- 分页 -->
-    <el-pagination
-      v-model:current-page="pageNo"
-      v-model:page-size="limit"
-      :page-sizes="[5, 10, 20, 50]"
-      background
-      size="large"
-      layout="prev, pager, next, jumper, ->, sizes, total"
+    <AppPagination
+      v-model:page="pageNo"
+      v-model:size="limit"
       :total="total"
+      class="brand-pagination"
       @current-change="fetchBrandList"
-      @size-change="handleSizeChange"
+      @size-change="setPageSize"
     />
     <!-- 新增 / 编辑弹窗 -->
     <!-- append-to-body：脱离内容区 z-index:0 的层叠上下文，弹窗才能压过顶部导航（z-index:100） -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="480px" append-to-body>
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      width="480px"
+      append-to-body
+      destroy-on-close
+    >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px">
         <el-form-item label="品牌名称" prop="name">
           <el-input
@@ -223,20 +192,8 @@ onMounted(fetchBrandList)
           />
         </el-form-item>
         <el-form-item label="品牌LOGO" prop="logoUrl">
-          <!-- 选图即上传：成功后 URL 写入 form.logoUrl；编辑时回显预览，点击可重新选图 -->
-          <el-upload
-            :show-file-list="false"
-            :http-request="handleUpload"
-            :before-upload="beforeUpload"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-          >
-            <div class="logo-uploader" v-loading="uploading">
-              <img v-if="form.logoUrl" :src="form.logoUrl" class="logo-preview" alt="品牌LOGO" />
-              <el-icon v-else class="logo-uploader-icon">
-                <Plus />
-              </el-icon>
-            </div>
-          </el-upload>
+          <!-- 选图即上传：URL 经「数组 ↔ 单值」桥接写入 form.logoUrl；编辑时回显，可删除重传 -->
+          <ImageUploader v-model="logoImages" :max="1" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -250,6 +207,12 @@ onMounted(fetchBrandList)
 <style scoped lang="scss">
 .brand-table {
   margin: 15px auto;
+}
+
+// 分页器间距由父级控制（class 透传到 AppPagination 根元素）
+.brand-pagination {
+  margin-top: 15px;
+  justify-content: flex-end;
 }
 
 // display:block 覆盖 EP 默认的 inline-block：消除行框基线下方空隙，行高与占位行一致
@@ -266,37 +229,8 @@ onMounted(fetchBrandList)
   width: 80px;
   height: 80px;
   font-size: 12px;
-  color: #909399;
-  background-color: #f5f7fa;
+  color: var(--el-text-color-secondary);
+  background-color: var(--el-fill-color-light);
   border-radius: 4px;
-}
-
-// 弹窗内上传区：未上传显示虚线框 + 加号，已上传显示预览
-.logo-uploader {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100px;
-  height: 100px;
-  border: 1px dashed #dcdfe6;
-  border-radius: 6px;
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.2s;
-
-  &:hover {
-    border-color: var(--el-color-primary);
-  }
-
-  .logo-uploader-icon {
-    font-size: 24px;
-    color: #8c939d;
-  }
-
-  .logo-preview {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
 }
 </style>

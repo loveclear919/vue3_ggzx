@@ -10,16 +10,22 @@ import { Category } from '../src/models/Category.js'
 import { Attr } from '../src/models/Attr.js'
 import { Brand } from '../src/models/Brand.js'
 import { Spu } from '../src/models/Spu.js'
+import { Sku } from '../src/models/Sku.js'
 import { BaseSaleAttr } from '../src/models/BaseSaleAttr.js'
 import { User } from '../src/models/User.js'
+import { Role } from '../src/models/Role.js'
+import { Permission } from '../src/models/Permission.js'
 
 const COLLECTIONS = [
   ['Category', Category],
   ['Attr', Attr],
   ['Brand', Brand],
   ['Spu', Spu],
+  ['Sku', Sku],
   ['BaseSaleAttr', BaseSaleAttr],
   ['User', User],
+  ['Role', Role],
+  ['Permission', Permission],
 ] as const
 
 async function indexNames(model: (typeof COLLECTIONS)[number][1]) {

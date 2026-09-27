@@ -1,7 +1,9 @@
 import { Brand, toBrandDTO } from '../models/Brand.js'
+import { Spu } from '../models/Spu.js'
 import { AppError } from '../utils/AppError.js'
 import { escapeRegExp } from '../utils/escapeRegExp.js'
 import { isDuplicateKeyError } from '../utils/mongoError.js'
+import { normalizePage } from '../utils/pagination.js'
 
 // 业务层：品牌管理（分页列表 / 新增 / 更新 / 删除）
 
@@ -21,9 +23,8 @@ export async function listBrands({ page, pageSize, keyword }: ListBrandsParams) 
     filter.name = { $regex: escapeRegExp(keyword), $options: 'i' }
   }
 
-  // 防御：非法页码/页大小规范化（0、负数、超大 pageSize 都不击穿查询）
-  const safePage = Math.max(1, Math.floor(page))
-  const safePageSize = Math.min(100, Math.max(1, Math.floor(pageSize)))
+  // 分页参数收口（0、负数、超大 pageSize 都不击穿查询）
+  const { page: safePage, pageSize: safePageSize } = normalizePage(page, pageSize)
 
   // 列表与总数并行查询，互不阻塞
   const [list, total] = await Promise.all([
@@ -97,6 +98,10 @@ export async function updateBrand(id: string, updates: Record<string, unknown>) 
 
 // 删除
 export async function deleteBrand(id: string) {
+  // I7：先查 SPU 引用（不存在的品牌自然计数为 0，404 由下面的删除结果收口）
+  if (await Spu.countDocuments({ brandId: id })) {
+    throw AppError.conflict('该品牌下仍有 SPU')
+  }
   const brand = await Brand.findByIdAndDelete(id)
   if (!brand) {
     throw AppError.notFound('品牌不存在')

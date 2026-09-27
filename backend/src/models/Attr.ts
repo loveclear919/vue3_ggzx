@@ -9,8 +9,7 @@ export interface IAttr {
   updatedAt: Date
 }
 
-// 本模块的数字边界总表 —— 唯一来源：模型 validator 与 service 的校验/文案共用，
-// 改边界只改这一处（此前 service 里还有一份副本，靠注释"与模型对齐"约束，已收口）
+// 边界
 export const ATTR_LIMITS = {
   NAME_LENGTH: 30,
   MAX_VALUES_COUNT: 20,

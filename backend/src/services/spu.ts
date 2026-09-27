@@ -6,6 +6,7 @@ import {
   type ISpuImage,
   type ISpuSaleAttr,
 } from '../models/Spu.js'
+import { Sku } from '../models/Sku.js'
 import { Brand } from '../models/Brand.js'
 import { Category } from '../models/Category.js'
 import { Attr } from '../models/Attr.js'
@@ -13,6 +14,7 @@ import { BaseSaleAttr } from '../models/BaseSaleAttr.js'
 import { AppError } from '../utils/AppError.js'
 import { escapeRegExp } from '../utils/escapeRegExp.js'
 import { isDuplicateKeyError } from '../utils/mongoError.js'
+import { normalizePage } from '../utils/pagination.js'
 
 // 业务层：SPU 管理
 
@@ -189,8 +191,7 @@ export async function listSpus({ category3Id, page, pageSize, keyword }: ListSpu
     filter.name = { $regex: escapeRegExp(keyword), $options: 'i' }
   }
 
-  const safePage = Math.max(1, Math.floor(page))
-  const safePageSize = Math.min(100, Math.max(1, Math.floor(pageSize)))
+  const { page: safePage, pageSize: safePageSize } = normalizePage(page, pageSize)
 
   const [list, total] = await Promise.all([
     Spu.find(filter)
@@ -201,6 +202,15 @@ export async function listSpus({ category3Id, page, pageSize, keyword }: ListSpu
   ])
 
   return { list: list.map(toSpuDTO), total }
+}
+
+// SPU 详情（SKU 页入口依赖：页面刷新后需要 SPU 上下文，列表行数据带不过来）
+export async function getSpuById(id: string) {
+  const spu = await Spu.findById(id)
+  if (!spu) {
+    throw AppError.notFound('SPU 不存在')
+  }
+  return toSpuDTO(spu)
 }
 
 export interface CreateSpuParams {
@@ -247,16 +257,26 @@ export async function createSpu(params: CreateSpuParams) {
   }
 }
 
+// 销售属性列表的规范化形式（I6 同值放行比对用）：
+// 维度按码点排序、每个维度的值去重后排序 —— 与提交顺序无关，只关心语义集合
+function canonicalSaleAttrList(saleAttrList: ISpuSaleAttr[]): string {
+  return JSON.stringify(
+    saleAttrList
+      .map((dim) => [dim.saleAttrName, [...new Set(dim.saleAttrValueList)].sort()] as const)
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)),
+  )
+}
+
 // 更新走白名单
 export async function updateSpu(id: string, updates: Record<string, unknown>) {
   const patch: Record<string, unknown> = {}
 
   // 分类比对与属性名校验都要当前文档：惰性取一次，两处共用（避免重复查库）
-  type CurrentSpu = { category3Id: unknown; attrList: ISpuAttr[] }
+  type CurrentSpu = { category3Id: unknown; attrList: ISpuAttr[]; saleAttrList: ISpuSaleAttr[] }
   let current: CurrentSpu | undefined // 不缓存"没查到"：直接抛 404，避免 null 在调用处需要二次收窄
   const loadCurrent = async (): Promise<CurrentSpu> => {
     if (current === undefined) {
-      const found = await Spu.findById(id).select('category3Id attrList').lean()
+      const found = await Spu.findById(id).select('category3Id attrList saleAttrList').lean()
       if (!found) {
         throw AppError.notFound('SPU 不存在')
       }
@@ -323,6 +343,16 @@ export async function updateSpu(id: string, updates: Record<string, unknown>) {
     }
     const saleAttrList = normalizeSaleAttrList(updates.saleAttrList)
     await ensureSaleAttrNamesValid(saleAttrList)
+
+    // I6：存在 SKU 时销售属性冻结 —— 组合集变了会让已生成的 SKU 变孤儿。
+    // 编辑表单总是带全量 saleAttrList，用规范化形式比对（与顺序无关）：一致才放行
+    const snapshot = await loadCurrent()
+    if (
+      (await Sku.countDocuments({ spuId: id })) > 0 &&
+      canonicalSaleAttrList(snapshot.saleAttrList) !== canonicalSaleAttrList(saleAttrList)
+    ) {
+      throw AppError.conflict('请先删除该 SPU 下的 SKU')
+    }
     patch.saleAttrList = saleAttrList
   }
 
@@ -346,6 +376,10 @@ export async function updateSpu(id: string, updates: Record<string, unknown>) {
 }
 
 export async function deleteSpu(id: string) {
+  // I6：先查 SKU 引用（不存在的 SPU 自然计数为 0，404 由下面的删除结果收口）
+  if (await Sku.countDocuments({ spuId: id })) {
+    throw AppError.conflict('请先删除该 SPU 下的 SKU')
+  }
   const spu = await Spu.findByIdAndDelete(id)
   if (!spu) {
     throw AppError.notFound('SPU 不存在')

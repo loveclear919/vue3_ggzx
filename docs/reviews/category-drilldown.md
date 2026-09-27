@@ -85,6 +85,7 @@ services/category.ts     listChildCategories：parentId 过滤 + hasChildren 聚
 
 1. **分类管理页的接口复用约定未落文档** —— `GET /api/category` 当前无 keyword/分页，分类管理页动工时需要加参数。两处消费方（下钻、管理）对同一接口的演进会互相影响，**动工时必须先定接口契约再写页面**。
 2. **快速连点的请求竞态** —— 连续快速点击不同分类，两个 `fetchCategoryLevel` 并发，后发的可能先返回导致列表错乱。当前本地量级无感；接口一旦变慢，需要请求序号（token）丢弃过期响应。
+   → ✅ **已处理（2026-09-15）**：`fetchCategoryLevel` 已加请求序号防竞态（只认最后一次发起的结果），同款防护同步补到 attr/SPU/SKU 页的列表拉取。
 3. ~~`GET /tree` 与 `getCategoryTree` 已成死代码~~ —— ✅ 已解决：确认逐级下钻为唯一形态后，全量组装链路（`listCategoryTree`/`toCategoryNode`/`getTree` + 前端 `getCategoryTree`）已整体删除，分类只保留平铺查询一个入口。
 4. **三级分类平铺列表无搜索** —— 某个二级分类下三级有几百条时，纯滚动寻找效率低。淘宝/京东形态里搜索是标配，将来可在列表顶部加过滤输入框（后端 keyword 参数已预留）。
 5. **两份同构逻辑复制在 attr/SPU 两页** —— 下钻状态与函数完全一致的两份拷贝。第三个页面（如分类管理复用此形态）出现时，必须抽成 `useCategoryDrilldown` composable，否则三处维护是隐患。
@@ -95,6 +96,7 @@ services/category.ts     listChildCategories：parentId 过滤 + hasChildren 聚
 2. **下钻列表加关键词过滤** —— 后端 `listChildCategories` 加 keyword（`escapeRegExp` 工具已就绪），前端列表顶部一个输入框，一次改三处消费方。
 3. **面包屑状态持久化** —— 将来若希望刷新页面后恢复上次的下钻路径，可把 path 存入 Pinia（用户级记忆策略此前讨论过，当前不做）。
 4. **竞态防护前置** —— 给 `fetchCategoryLevel` 加请求序号，过期响应直接丢弃，避免等「量级上来后偶发错乱」再排查。
+   → ✅ **已做（2026-09-15）**，见风险提示 2 的标注。
 
 ---
 

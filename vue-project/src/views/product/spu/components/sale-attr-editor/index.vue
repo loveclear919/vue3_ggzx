@@ -2,7 +2,7 @@
 import { Plus, Delete } from '@element-plus/icons-vue'
 import type { SpuSaleAttr } from '@/api/product/spu/type'
 import type { BaseSaleAttrInfo } from '@/api/product/baseSaleAttr/type'
-import { SPU_LIMITS } from '../constants'
+import { SPU_LIMITS } from '../../constants'
 
 // 销售属性动态行编辑器：维度名下拉（字典）+ 多值输入 + 行增删
 // 行数上限见 SPU_LIMITS.MAX_SALE_ATTR_COUNT；值级校验（去重/长度/个数）由弹窗提交时负责

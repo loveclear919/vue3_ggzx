@@ -5,7 +5,7 @@ import type {
   Router,
 } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { LAST_VISITED_KEY } from '@/utils/storage'
+import { LAST_VISITED_KEY, TOKEN_KEY } from '@/utils/storage'
 import { isAxiosError } from 'axios'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
@@ -21,8 +21,10 @@ export const authGuard: NavigationGuardWithThis<undefined> = async (to) => {
   // 拿到仓库
   const userStore = useUserStore()
 
+  const hasToken = () => !!localStorage.getItem(TOKEN_KEY)
+
   // 已登录 不再返回登录页
-  if (to.path === '/login' && userStore.token) {
+  if (to.path === '/login' && hasToken()) {
     return localStorage.getItem(LAST_VISITED_KEY) || '/'
   }
   // 白名单直接放行
@@ -30,7 +32,7 @@ export const authGuard: NavigationGuardWithThis<undefined> = async (to) => {
     return true
   }
   // 未登录 → 去登录页，并记录"本来想去哪"
-  if (!userStore.token) {
+  if (!hasToken()) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
   // 已登录但用户信息还没恢复（刷新场景）→ 拉取

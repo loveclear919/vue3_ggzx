@@ -5,7 +5,33 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>%VITE_APP_TITLE%</title>
+    <style>
+      /* 暗色首屏兜底：bundle CSS 到达前（dev 下由 JS 注入，硬刷新有间隙）先把根元素染暗，
+       避免白屏闪烁。值与 EP dark/css-vars.css 的 --el-bg-color 保持一致。
+       bundle 就绪后，样式表里的 html { background-color: var(--el-bg-color) } 与其同值，无视觉差异 */
+      html.dark {
+        background-color: #141414;
+        color-scheme: dark;
+      }
+    </style>
+    <script>
+      // 防闪烁：同步读主题偏好，在首帧绘制前给 html 打上 dark class。
+      // 必须内联且阻塞 —— 放在任何 CSS/JS 之后都会先渲染出亮色再变暗（FOUC）。
+      // key 与 src/utils/storage.ts 的 THEME_KEY 保持一致。
+      ;(function () {
+        try {
+          var mode = localStorage.getItem('themeMode') || 'auto'
+          var dark =
+            mode === 'dark' ||
+            (mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (e) {
+          /* localStorage 被禁用时静默降级为亮色 */
+        }
+      })()
+    </script>
   </head>
+
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>

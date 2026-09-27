@@ -3,11 +3,15 @@ import { ref } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import type { UploadRequestHandler, UploadProps } from 'element-plus'
 import { uploadFile } from '@/api/upload'
-import type { SpuImage } from '@/api/product/spu/type'
-import { SPU_LIMITS } from '../constants'
 
-// 图片墙编辑器：选图即上传（两段式），URL 收集进 v-model；数量上限见 SPU_LIMITS
-const model = defineModel<SpuImage[]>({ required: true })
+// 数量上限由调用方传入（必填）：通用组件不依赖任何业务模块的常量
+interface ImageItem {
+  imageUrl: string
+  imageName: string
+}
+
+const props = defineProps<{ max: number }>()
+const model = defineModel<ImageItem[]>({ required: true })
 
 const uploading = ref(false)
 
@@ -21,8 +25,8 @@ const beforeImageUpload: UploadProps['beforeUpload'] = (rawFile) => {
     ElMessage.error('图片大小不能超过 2MB')
     return false
   }
-  if (model.value.length >= SPU_LIMITS.MAX_IMAGE_COUNT) {
-    ElMessage.error(`最多上传 ${SPU_LIMITS.MAX_IMAGE_COUNT} 张图片`)
+  if (model.value.length >= props.max) {
+    ElMessage.error(`最多上传 ${props.max} 张图片`)
     return false
   }
   return true
@@ -59,6 +63,7 @@ const removeImage = (index: number) => {
       </el-icon>
     </div>
     <el-upload
+      v-if="model.length < props.max"
       :show-file-list="false"
       :http-request="handleImageUpload"
       :before-upload="beforeImageUpload"
@@ -104,8 +109,9 @@ const removeImage = (index: number) => {
     width: 22px;
     height: 22px;
     font-size: 13px;
+    // 危险色徽标：白字在亮/暗两态保持一致（danger 底色两态都是红）
     color: #fff;
-    background-color: #f56c6c;
+    background-color: var(--el-color-danger);
     border-radius: 50%;
     cursor: pointer;
     transition: transform 0.2s;
@@ -125,8 +131,8 @@ const removeImage = (index: number) => {
   width: 100px;
   height: 100px;
   font-size: 12px;
-  color: #8c939d;
-  border: 1px dashed #dcdfe6;
+  color: var(--el-text-color-placeholder);
+  border: 1px dashed var(--el-border-color);
   border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s;

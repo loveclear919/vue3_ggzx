@@ -8,6 +8,7 @@ const router = Router()
 router.use(auth)
 
 router.get('/', spuController.listSpus)
+router.get('/:id', spuController.getSpuById)
 router.post('/', spuController.createSpu)
 router.patch('/:id', spuController.updateSpu)
 router.delete('/:id', spuController.deleteSpu)

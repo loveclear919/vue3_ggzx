@@ -46,7 +46,7 @@ export function errorHandler(
     return
   }
 
-  // 5. multer 上传错误（文件超限等）
+  // 5. multer 上传错误
   if (e.name === 'MulterError') {
     const code = (err as { code?: string }).code
     const message = code === 'LIMIT_FILE_SIZE' ? '图片大小不能超过 2MB' : '文件上传失败'

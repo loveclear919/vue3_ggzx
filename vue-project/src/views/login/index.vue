@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { User, Lock } from '@element-plus/icons-vue'
+import { Iphone, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getTimePeriod } from '@/utils/time'
+import { PHONE_REGEX } from '@/utils/phone'
 
 const userStore = useUserStore()
 const $router = useRouter()
@@ -13,15 +14,15 @@ const $route = useRoute()
 // 卡片翻转状态：false = 注册面（正面），true = 登录面（背面）
 const flipped = ref(false)
 
-// 两个表单各自独立的数据
+// 两个表单各自独立的数据（登录凭据是手机号，用户名是注册后自动生成的展示名）
 const registerForm = reactive({
-  username: '',
+  phone: '',
   password: '',
   confirmPassword: '',
 })
 
 const loginForm = reactive({
-  username: '',
+  phone: '',
   password: '',
 })
 
@@ -29,23 +30,11 @@ const loginForm = reactive({
 const registerFormRef = ref<FormInstance>()
 const loginFormRef = ref<FormInstance>()
 
-// 注册表单校验规则 — 文案与后端 Schema 校验保持一致
+// 注册表单校验规则 — 文案与后端 Schema 校验保持一致；手机号严格正则（不做清洗）
 const registerRules: FormRules = {
-  username: [
-    { type: 'string', required: true, message: '请输入用户名', trigger: 'blur' },
-    { type: 'string', min: 3, max: 20, message: '用户名长度 3-20 个字符', trigger: 'blur' },
-    {
-      type: 'string',
-      // 	(rule, value, callback) => {...}
-      validator: (_rule, value, callback) => {
-        if (/^[\w\-－＿０-９\u4e00-\u9fa5\uFF21-\uFF3A\uFF41-\uFF5A]+$/.test(value)) {
-          callback()
-        } else {
-          callback(new Error('用户名仅支持中英文、数字、下划线和短横线，且不包含空格'))
-        }
-      },
-      trigger: 'blur',
-    },
+  phone: [
+    { type: 'string', required: true, message: '请输入手机号', trigger: 'blur' },
+    { type: 'string', pattern: PHONE_REGEX, message: '手机号格式不正确', trigger: 'blur' },
   ],
   password: [
     { type: 'string', required: true, message: '请输入密码', trigger: 'blur' },
@@ -55,7 +44,6 @@ const registerRules: FormRules = {
     { type: 'string', required: true, message: '请再次输入密码', trigger: 'blur' },
     {
       type: 'string',
-      // 	(rule, value, callback) => {...}
       validator: (_rule, value, callback) => {
         if (value !== registerForm.password) {
           callback(new Error('两次输入的密码不一致'))
@@ -70,7 +58,10 @@ const registerRules: FormRules = {
 
 // 登录表单校验规则
 const loginRules: FormRules = {
-  username: [{ type: 'string', required: true, message: '请输入用户名', trigger: 'blur' }],
+  phone: [
+    { type: 'string', required: true, message: '请输入手机号', trigger: 'blur' },
+    { type: 'string', pattern: PHONE_REGEX, message: '手机号格式不正确', trigger: 'blur' },
+  ],
   password: [{ type: 'string', required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
@@ -81,7 +72,7 @@ const login = async () => {
   if (!valid) return
 
   try {
-    await userStore.login(loginForm.username, loginForm.password)
+    await userStore.login(loginForm.phone, loginForm.password)
     // 支持路由守卫传来的 redirect 参数，登录后跳回原页面
     const redirect = typeof $route.query.redirect === 'string' ? $route.query.redirect : '/'
     // 先跳转、后问候：await 等导航完成（含异步路由组件加载、页面挂载），
@@ -89,7 +80,8 @@ const login = async () => {
     await $router.push(redirect)
     ElNotification.success({
       title: `${getTimePeriod()}好!`,
-      message: `欢迎回来，${loginForm.username}!`,
+      // 优先展示名（username），未改名时回退到手机号
+      message: `欢迎回来，${userStore.userInfo?.username ?? loginForm.phone}!`,
     })
   } catch {
     // ② 绕过前端的请求由后端兜底，错误提示已由响应拦截器弹出
@@ -103,14 +95,14 @@ const register = async () => {
   if (!valid) return
 
   try {
-    await userStore.register(registerForm.username, registerForm.password)
+    await userStore.register(registerForm.phone, registerForm.password)
     ElNotification.success({ title: '注册成功', message: '请登录你的新账号' })
     // 清空敏感字段，翻到登录面
     registerForm.password = ''
     registerForm.confirmPassword = ''
     flipped.value = true
   } catch (e) {
-    // ② 后端兜底（如用户名已存在），提示由拦截器弹出
+    // ② 后端兜底（如手机号已存在），提示由拦截器弹出
     console.error('[register] 注册失败:', e)
   }
 }
@@ -129,12 +121,13 @@ const register = async () => {
               <h2>欢迎注册</h2>
               <p>创建你的新账号</p>
               <el-form ref="registerFormRef" :model="registerForm" :rules="registerRules">
-                <el-form-item prop="username">
+                <el-form-item prop="phone">
                   <el-input
-                    v-model="registerForm.username"
-                    placeholder="请输入用户名"
+                    v-model="registerForm.phone"
+                    placeholder="请输入手机号"
                     size="large"
-                    :prefix-icon="User"
+                    :prefix-icon="Iphone"
+                    maxlength="11"
                   />
                 </el-form-item>
                 <el-form-item prop="password">
@@ -168,12 +161,13 @@ const register = async () => {
               <h2>欢迎回来</h2>
               <p>登录你的账号</p>
               <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules">
-                <el-form-item prop="username">
+                <el-form-item prop="phone">
                   <el-input
-                    v-model="loginForm.username"
-                    placeholder="请输入用户名"
+                    v-model="loginForm.phone"
+                    placeholder="请输入手机号"
                     size="large"
-                    :prefix-icon="User"
+                    :prefix-icon="Iphone"
+                    maxlength="11"
                   />
                 </el-form-item>
                 <el-form-item prop="password">
@@ -204,7 +198,7 @@ const register = async () => {
   width: 100vw;
   height: 100vh;
   background: url('@/assets/images/login_bg.svg') no-repeat center center / cover;
-  background-color: #eee;
+  background-color: var(--el-bg-color-page);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -213,7 +207,8 @@ const register = async () => {
     width: 96.5vw;
     height: 94vh;
     padding: 0 5vw;
-    background-color: #fffc;
+    // 80% 磨砂白：随主题取底色再降不透明度，暗色下自动变成 80% 深色
+    background-color: color-mix(in srgb, var(--el-bg-color) 80%, transparent);
     border-radius: 10px;
   }
 
@@ -251,7 +246,7 @@ const register = async () => {
   .flip-face {
     width: 100%;
     padding: 48px 40px 40px;
-    background-color: #ffffff;
+    background-color: var(--el-bg-color);
     border-radius: 16px;
     box-shadow: 0 12px 32px rgba(31, 45, 61, 0.08);
     // 关键：看不到自己的背面
@@ -267,7 +262,7 @@ const register = async () => {
     p {
       margin-bottom: 32px;
       font-size: 0.875rem;
-      color: #909399;
+      color: var(--el-text-color-secondary);
       text-align: center;
     }
 

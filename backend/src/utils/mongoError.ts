@@ -1,11 +1,24 @@
 // MongoDB 错误码识别工具
-
-/** Mongo 唯一索引冲突（重复键）错误 —— 错误码固定为 11000 */
-export function isDuplicateKeyError(err: unknown): boolean {
+export function isDuplicateKeyError(err: unknown, key?: string): boolean {
+  if (typeof err !== 'object' || err === null) {
+    return false
+  }
+  const e = err as {
+    code?: number
+    keyPattern?: Record<string, unknown>
+    writeErrors?: Array<{
+      err?: { code?: number; keyPattern?: Record<string, unknown> }
+      code?: number
+    }>
+  }
+  const is11000 = (code?: number) => code === 11000
+  const isTarget = (keyPattern?: Record<string, unknown>) =>
+    key === undefined || !!keyPattern?.[key]
+  if (e.code === 11000) {
+    return isTarget(e.keyPattern)
+  }
   return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: number }).code === 11000
+    Array.isArray(e.writeErrors) &&
+    e.writeErrors.some((w) => is11000(w?.err?.code ?? w?.code) && isTarget(w?.err?.keyPattern))
   )
 }

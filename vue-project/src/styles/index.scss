@@ -1,6 +1,12 @@
 // 引入清除默认样式
 @use './reset.scss';
 
+/* 主题：根元素跟随主题底色，避免 overscroll（触底回弹）时露出白边。
+   color-scheme 无需在此声明 —— EP 的 base.css 与 dark/css-vars.css 已分别处理亮/暗两端 */
+html {
+  background-color: var(--el-bg-color);
+}
+
 /* 滚动条滑块颜色 */
 ::-webkit-scrollbar {
   width: 10px;
@@ -22,4 +28,9 @@
 // 进度条
 #nprogress .bar {
   background: $vivo-blue !important;
+}
+
+.el-dropdown-menu__item.is-theme-active {
+  color: var(--el-color-primary);
+  font-weight: 600;
 }

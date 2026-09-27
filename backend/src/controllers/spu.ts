@@ -77,3 +77,14 @@ export async function deleteSpu(req: Request, res: Response) {
   await spuService.deleteSpu(id)
   ok(res, null, '删除成功')
 }
+
+// SPU 详情：SKU 页刷新后靠它取上下文（名称、销售属性快照、图片），随 SKU 模块补上
+export async function getSpuById(req: Request, res: Response) {
+  const id = req.params.id
+  if (!id || Array.isArray(id)) {
+    throw AppError.badRequest('缺少 SPU id')
+  }
+
+  const data = await spuService.getSpuById(id)
+  ok(res, data)
+}

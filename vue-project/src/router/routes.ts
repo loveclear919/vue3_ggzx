@@ -65,10 +65,10 @@ export const menuRoutes: RouteRecordRaw[] = [
         meta: { title: 'SPU管理', icon: 'Management', hidden: false },
       },
       {
-        path: '/product/sku',
+        path: '/product/spu/sku',
         name: 'sku',
         component: () => import('@/views/product/sku/index.vue'),
-        meta: { title: 'SKU管理', icon: 'List', hidden: false },
+        meta: { title: 'SKU管理', hidden: true },
       },
     ],
   },

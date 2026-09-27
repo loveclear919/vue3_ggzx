@@ -12,16 +12,24 @@
 
 /* 移除默认 margin，统一行高 */
 body,
-h1, h2, h3, h4, h5, h6,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
 p,
-ul, ol, dl,
+ul,
+ol,
+dl,
 figure,
 blockquote {
   margin: 0;
 }
 
 /* 列表去点 */
-ul, ol {
+ul,
+ol {
   padding: 0;
   list-style: none;
 }
@@ -105,4 +113,3 @@ table {
     scroll-behavior: auto !important;
   }
 }
-

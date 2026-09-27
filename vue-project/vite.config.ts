@@ -31,6 +31,7 @@ export default defineConfig({
     }),
     // 自动注册模板组件 <el-button>等
     Components({
+      dirs: [],
       resolvers: [
         IconsResolver({
           prefix: 'icon', // 自动引入的Icon组件统一前缀，默认为 i，设置false为不需要前缀

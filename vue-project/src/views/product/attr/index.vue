@@ -7,6 +7,7 @@ import type { CategoryFlatNode } from '@/api/category/type'
 import { getAttrList, createAttr, updateAttr, deleteAttr } from '@/api/product/attr'
 import type { AttrInfo } from '@/api/product/attr/type'
 import { ATTR_LIMITS } from './constants'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 
 // ---- 逐级下钻分类选择（左侧）：下钻逻辑抽离为全局组件 components/category，本页只响应选中 ----
 // 当前选中的三级分类（null = 未选择）
@@ -20,21 +21,18 @@ const handleCategorySelect = (node: CategoryFlatNode) => {
 
 // ---- 属性列表（右侧） ----
 const attrList = ref<AttrInfo[]>([])
-const loading = ref(false)
+// 属性列表拉取（只认最后一次请求，防竞态）
+const { loading, run: runAttrList } = useLatestRequest()
 // 空态文案区分两种语义：未选择分类 = 引导；已选择但无数据 = 结果说明
 const emptyText = computed(() => (selectedCategory.value ? '暂无数据' : '请先在左侧选择三级分类'))
 
 // 展示当前选中分类的属性列表
 const fetchAttrList = async () => {
   if (!selectedCategory.value) return
-  loading.value = true
-  try {
-    attrList.value = await getAttrList(selectedCategory.value.categoryId)
-  } catch {
-    // 错误提示已由响应拦截器统一弹出
-  } finally {
-    loading.value = false
-  }
+  // 闭包内对可变 ref 不做空值收窄：先捕获为局部常量
+  const categoryId = selectedCategory.value.categoryId
+  const list = await runAttrList(() => getAttrList(categoryId))
+  if (list !== undefined) attrList.value = list
 }
 
 // ---- 新增 / 编辑（共用弹窗） ----
@@ -100,6 +98,11 @@ const removeValue = (index: number) => {
 }
 
 const handleSubmit = async () => {
+  // 前置守卫：不用非空断言 —— 断言若被绕过（如键盘触发），TypeError 会被外层 catch 吞掉变成无声失败
+  if (!selectedCategory.value) return
+  // 捕获为局部常量：await 之后 TS 对 ref 属性的收窄不保证延续
+  const categoryId = selectedCategory.value.categoryId
+
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
@@ -110,7 +113,7 @@ const handleSubmit = async () => {
       ElMessage.success('修改成功')
     } else {
       await createAttr({
-        categoryId: selectedCategory.value!.categoryId,
+        categoryId,
         name: form.name,
         values: form.values,
       })
@@ -147,7 +150,6 @@ const handleDelete = async (row: AttrInfo) => {
 }
 </script>
 <template>
-  <!-- 单根容器：路由切换的 Transition 只能动画单根元素组件（多根 fragment 会警告且动画失效） -->
   <div class="attr-page">
     <el-row :gutter="20">
       <!-- 左侧：逐级下钻分类选择（抽离为全局组件 components/category，本页只响应 select 事件） -->
@@ -176,7 +178,14 @@ const handleDelete = async (row: AttrInfo) => {
               >
             </div>
           </template>
-          <el-table :data="attrList" border stripe v-loading="loading" :empty-text="emptyText">
+          <el-table
+            :data="attrList"
+            border
+            stripe
+            v-loading="loading"
+            :empty-text="emptyText"
+            row-key="attrId"
+          >
             <el-table-column label="序号" width="80" align="center">
               <template #default="scope">
                 <span>{{ scope.$index + 1 }}</span>

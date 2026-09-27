@@ -44,7 +44,8 @@ const route = useRoute()
   position: relative;
   width: 100%;
   height: 100vh;
-  background-color: white;
+  // 外壳底色：亮色 #fff（与原 white 一致），暗色 #141414；卡片在暗色下用 overlay #1d1e1f，自然形成层次
+  background-color: var(--el-bg-color);
   // 统一设置侧边栏宽度
   --menu-width: #{$base-menu-width};
 
@@ -64,7 +65,7 @@ const route = useRoute()
       height: calc(100vh - $base-menu-logo-height);
 
       .menu {
-        --el-menu-bg-color: $vivo-dark;
+        --el-menu-bg-color: $base-menu-background;
         --el-menu-text-color: white;
         --el-menu-hover-bg-color: rgba(255, 255, 255, 0.1);
         border-right: none;

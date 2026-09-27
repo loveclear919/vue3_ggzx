@@ -5,9 +5,9 @@ const settingStore = useSettingStore()
 <template>
   <router-view v-slot="{ Component, route }">
     <transition name="fade" mode="out-in">
-      <div :key="route.path" v-if="!settingStore.refresh">
-        <component :is="Component" />
-      </div>
+      <keep-alive :include="['Spu']">
+        <component :is="Component" :key="route.fullPath" v-if="!settingStore.refresh"></component>
+      </keep-alive>
     </transition>
   </router-view>
 </template>
