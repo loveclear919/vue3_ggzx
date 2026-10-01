@@ -46,6 +46,12 @@ export function errorHandler(
     return
   }
 
+  // 4.5 请求体过大（express.json 默认 100kb 上限）：必须 413 而非伪装成 500
+  if (e.type === 'entity.too.large') {
+    res.status(413).json({ code: 413, message: '请求体过大，请压缩后重试' })
+    return
+  }
+
   // 5. multer 上传错误
   if (e.name === 'MulterError') {
     const code = (err as { code?: string }).code

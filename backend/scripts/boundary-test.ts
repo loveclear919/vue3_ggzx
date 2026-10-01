@@ -26,7 +26,7 @@ const uploadedFiles: string[] = []
 async function req(
   method: string,
   path: string,
-  opts: { body?: unknown; auth?: boolean; rawBody?: BodyInit } = {},
+  opts: { body?: unknown; auth?: boolean; rawBody?: BodyInit; token?: string } = {},
 ) {
   const init: RequestInit = { method }
   if (opts.body !== undefined) {
@@ -35,7 +35,9 @@ async function req(
   } else if (opts.rawBody !== undefined) {
     init.body = opts.rawBody
   }
-  const h = opts.auth === false ? {} : headers
+  // token 参数 > 默认 bootstrap 头；auth: false 不带任何认证
+  const h =
+    opts.auth === false ? {} : opts.token ? { Authorization: `Bearer ${opts.token}` } : headers
   init.headers = { ...init.headers, ...h }
   const res = await fetch(BASE + path, init)
   const json = await res.json().catch(() => null)
@@ -73,6 +75,9 @@ const bootstrapPhone = '13900000001' // 固定手机号：随用户名一起复�
 // 基础角色 id（bootstrap 时按名从角色列表取）：User.roles 存角色 id，用户管理用例需引用
 let userRoleId = ''
 let adminRoleId = ''
+// RBAC 用例共享：super_admin 角色 id 与超管 token（13800138000 由 seed:admin 挂 super_admin）
+let superAdminRoleId = ''
+let superToken = ''
 // 测试手机号统一 199123 前缀 + 时间戳后 4 位：11 位合法手机号、每次运行唯一、清理按前缀扫描
 const testPhone = `1991234${String(Date.now()).slice(-4)}` // 注册成功用例（用户名自动生成，靠手机号清理）
 const mgmtPhone = `1991235${String(Date.now()).slice(-4)}` // 用户管理用例
@@ -147,6 +152,32 @@ test('登录：手机号不存在 → 401（防枚举同文案）', async () => 
   })
   expectStatus(res, 401)
   expectMessage(res, '手机号或密码错误')
+})
+
+test('RBAC：登录响应含 codes 数组且无死字段 buttons/routes', async () => {
+  const res = await req('POST', '/auth/login', {
+    body: { phone: bootstrapPhone, password: '123456' },
+    auth: false,
+  })
+  expectStatus(res, 200)
+  const user = res.json?.data?.user as Record<string, unknown>
+  expect(Array.isArray(user?.codes), '登录响应 user.codes 应为数组')
+  expect(!('buttons' in user) && !('routes' in user), '登录响应不应再含死字段 buttons/routes')
+})
+
+test('RBAC：/user/info 响应含 codes 数组', async () => {
+  const res = await req('GET', '/user/info')
+  expectStatus(res, 200)
+  expect(Array.isArray(res.json?.data?.codes), '/user/info 响应 codes 应为数组')
+})
+
+test('RBAC：注册响应含 codes 数组', async () => {
+  const res = await req('POST', '/auth/register', {
+    body: { phone: `1991233${String(Date.now()).slice(-4)}`, password: '123456' },
+    auth: false,
+  })
+  expectStatus(res, 200)
+  expect(Array.isArray(res.json?.data?.user?.codes), '注册响应 user.codes 应为数组')
 })
 
 test('个人资料：avatar 更新 → 200', async () => {
@@ -1080,6 +1111,18 @@ test('SKU上架闸门：生成时勾选上架但未定价 → 400', async () => 
   await req('DELETE', `/spu/${spuId}`)
 })
 
+test('SKU上架闸门：在架 SKU 单请求改价到 0 → 400（生效后状态拦截）', async () => {
+  // 此时 gateSkuId 处于在架已定价（「定价后再上架」用例遗留状态）
+  const res = await req('PATCH', `/sku/${gateSkuId}`, { body: { price: 0 } })
+  expectStatus(res, 400)
+  expectMessage(res, '在架 SKU 不能改为未定价')
+})
+
+test('SKU上架闸门：在架 SKU 下架与改价同请求 → 200', async () => {
+  const res = await req('PATCH', `/sku/${gateSkuId}`, { body: { price: 0, isSale: false } })
+  expectStatus(res, 200)
+})
+
 // ==================== SKU 层 6：I6/I7 引用完整性 ====================
 test('SKU引用：删除有 SKU 的 SPU → 409', async () => {
   const res = await req('DELETE', `/spu/${skuSpuId}`)
@@ -1588,6 +1631,268 @@ test('权限管理：先删子级再删父级 → 200；再删 → 404', async (
   expectStatus(await req('DELETE', `/permission/${permMenuId}`), 404)
 })
 
+// ==================== RBAC 特权保护（rbac-design §4.4/§4.5） ====================
+
+test('RBAC：超管登录成功', async () => {
+  const res = await req('POST', '/auth/login', {
+    body: { phone: '13800138000', password: '123456' },
+    auth: false,
+  })
+  expectStatus(res, 200)
+  superToken = (res.json?.data as { token?: string })?.token ?? ''
+  expect(!!superToken, '应拿到超管 token')
+  // 全量基线抽查：商品页按钮 code 已铺开（seed:permissions 第二阶段）
+  const codes = (res.json?.data?.user as { codes?: string[] })?.codes ?? []
+  for (const c of ['spu:create', 'sku:generate', 'brand:delete', 'attr:update']) {
+    expect(codes.includes(c), `超管 codes 应含 ${c}`)
+  }
+})
+
+test('RBAC：无权限用户访问管理接口 → 403', async () => {
+  // 新注册 = 默认 user 角色（仅 /home /screen）
+  const reg = await req('POST', '/auth/register', {
+    body: { phone: `1991238${String(Date.now()).slice(-4)}`, password: '123456' },
+    auth: false,
+  })
+  expectStatus(reg, 200)
+  const plainToken = (reg.json?.data as { token?: string })?.token ?? ''
+  expect(!!plainToken, '应拿到普通用户 token')
+
+  expectStatus(await req('GET', '/user', { token: plainToken }), 403)
+  expectStatus(await req('GET', '/role', { token: plainToken }), 403)
+  expectStatus(await req('GET', '/permission', { token: plainToken }), 403)
+  expectStatus(
+    await req('POST', '/role', { token: plainToken, body: { roleName: `brole_x_${suffix}` } }),
+    403,
+  )
+  // 商品侧接口同样挂载 requirePermission（第二阶段铺开）
+  expectStatus(await req('GET', '/spu', { token: plainToken }), 403)
+  expectStatus(await req('POST', '/brand', { token: plainToken, body: { brandName: 'x' } }), 403)
+  expectStatus(await req('GET', '/brand/all', { token: plainToken }), 403)
+})
+
+test('RBAC：改/删内置角色 → 403；超管可改 remark 但不可改名', async () => {
+  const rolesRes = await req('GET', '/role?page=1&pageSize=100')
+  const list = (rolesRes.json?.data?.list as Array<{ roleId: string; roleName: string }>) ?? []
+  superAdminRoleId = list.find((r) => r.roleName === 'super_admin')?.roleId ?? ''
+  expect(!!superAdminRoleId, '应找到 super_admin 角色')
+
+  // bootstrap admin（无 grant-super）：一切修改都被拒
+  expectStatus(await req('PATCH', `/role/${superAdminRoleId}`, { body: { remark: 'x' } }), 403)
+  expectStatus(await req('PATCH', `/role/${superAdminRoleId}`, { body: { roleName: 'abc' } }), 403)
+  expectStatus(await req('DELETE', `/role/${superAdminRoleId}`), 403)
+  // 超管（持 grant-super）：可改 remark；改名仍是硬 403
+  expectStatus(
+    await req('PATCH', `/role/${superAdminRoleId}`, {
+      token: superToken,
+      body: { remark: '超级管理员' },
+    }),
+    200,
+  )
+  expectStatus(
+    await req('PATCH', `/role/${superAdminRoleId}`, {
+      token: superToken,
+      body: { roleName: 'abc' },
+    }),
+    403,
+  )
+  // 前端表单恒带 roleName：同名提交（未改名）应放行，否则内置角色在 UI 上完全无法编辑
+  expectStatus(
+    await req('PATCH', `/role/${superAdminRoleId}`, {
+      token: superToken,
+      body: { roleName: 'super_admin', remark: '超级管理员' },
+    }),
+    200,
+  )
+})
+
+test('RBAC：内置角色不可移除 grant-super；普通角色不可被授予 grant-super', async () => {
+  const permRes = await req('GET', '/permission')
+  const perms = (permRes.json?.data as Array<{ permissionId: string; code: string }>) ?? []
+  const grantId = perms.find((p) => p.code === 'role:grant-super')?.permissionId ?? ''
+  expect(!!grantId, '应找到 grant-super 权限')
+
+  // 超管把 super_admin 的 permissions 改成「不含 grant-super 的全量」→ 403（防自我锁死）
+  const allButGrant = perms.filter((p) => p.permissionId !== grantId).map((p) => p.permissionId)
+  expectStatus(
+    await req('PATCH', `/role/${superAdminRoleId}`, {
+      token: superToken,
+      body: { permissions: allButGrant },
+    }),
+    403,
+  )
+
+  // bootstrap admin（无 grant-super）给普通角色勾 grant-super → 403（提权闭环）
+  const created = await req('POST', '/role', { body: { roleName: `brole_grant_${suffix}` } })
+  expectStatus(created, 200)
+  const roleId = (created.json?.data as { roleId?: string })?.roleId ?? ''
+  const grantRes = await req('PATCH', `/role/${roleId}`, { body: { permissions: [grantId] } })
+  expectStatus(grantRes, 403)
+  expectMessage(grantRes, '超级授权')
+})
+
+test('RBAC：普通管理员改/删持超管用户 → 403', async () => {
+  const usersRes = await req('GET', '/user?page=1&pageSize=100')
+  const list = (usersRes.json?.data?.list as Array<{ userId: string; phone: string }>) ?? []
+  const superUserId = list.find((u) => u.phone === '13800138000')?.userId ?? ''
+  expect(!!superUserId, '应找到超管用户')
+
+  expectStatus(await req('PATCH', `/user/${superUserId}`, { body: { roles: [userRoleId] } }), 403)
+  expectStatus(await req('DELETE', `/user/${superUserId}`), 403)
+})
+
+test('RBAC：最后一名超管不可被改角色（含自我降级）', async () => {
+  const meRes = await req('GET', '/user/info', { token: superToken })
+  const superUserId = (meRes.json?.data as { userId?: string })?.userId ?? ''
+  expect(!!superUserId, '应拿到超管 userId')
+
+  // 直连库确认「唯一持有者」前提：开发期可能手动给其他账号挂过 super_admin，
+  // 存在多名持有者时降级其一属合法操作（保护只针对最后一名），此分支自适应跳过
+  await mongoose.connect(process.env.MONGODB_URI!)
+  const grant = await mongoose.connection
+    .db!.collection('permissions')
+    .findOne({ code: 'role:grant-super' })
+  const grantRoleIds = (
+    await mongoose.connection.db!.collection('roles').find({ permissions: grant?._id }).toArray()
+  ).map((r) => r._id)
+  const holderCount = await mongoose.connection
+    .db!.collection('users')
+    .countDocuments({ roles: { $in: grantRoleIds } })
+
+  if (holderCount === 1) {
+    const res = await req('PATCH', `/user/${superUserId}`, {
+      token: superToken,
+      body: { roles: [userRoleId] },
+    })
+    expectStatus(res, 403)
+    expectMessage(res, '至少保留一名超级管理员')
+    // 收窄语义：保留 super_admin 的同时追加普通角色 = 安全操作 → 200（随后还原）
+    expectStatus(
+      await req('PATCH', `/user/${superUserId}`, {
+        token: superToken,
+        body: { roles: [superAdminRoleId, userRoleId] },
+      }),
+      200,
+    )
+    expectStatus(
+      await req('PATCH', `/user/${superUserId}`, {
+        token: superToken,
+        body: { roles: [superAdminRoleId] },
+      }),
+      200,
+    )
+  } else {
+    console.log(`  ⏭️  当前 ${holderCount} 名超管（含开发期手动分配），跳过自我降级断言`)
+  }
+})
+
+test('RBAC：根节点不可改/删', async () => {
+  const permRes = await req('GET', '/permission')
+  const perms = (permRes.json?.data as Array<{ permissionId: string; code: string }>) ?? []
+  const rootId = perms.find((p) => p.code === '/')?.permissionId ?? ''
+  expect(!!rootId, '应找到根节点')
+  expectStatus(await req('PATCH', `/permission/${rootId}`, { body: { name: '改名失败' } }), 403)
+  expectStatus(await req('DELETE', `/permission/${rootId}`), 403)
+})
+
+test('RBAC：updateRole 传根 id → 静默剔除后 200', async () => {
+  const permRes = await req('GET', '/permission')
+  const perms = (permRes.json?.data as Array<{ permissionId: string; code: string }>) ?? []
+  const rootId = perms.find((p) => p.code === '/')?.permissionId ?? ''
+  const homeId = perms.find((p) => p.code === '/home')?.permissionId ?? ''
+  expect(!!rootId && !!homeId, '应找到根节点与 /home')
+
+  const created = await req('POST', '/role', { body: { roleName: `brole_root_${suffix}` } })
+  expectStatus(created, 200)
+  const roleId = (created.json?.data as { roleId?: string })?.roleId ?? ''
+  const res = await req('PATCH', `/role/${roleId}`, { body: { permissions: [rootId, homeId] } })
+  expectStatus(res, 200)
+  const saved = (res.json?.data as { permissions?: string[] })?.permissions ?? []
+  expect(!saved.includes(rootId), '根 id 应被静默剔除')
+  expect(saved.includes(homeId), '/home 应正常入库')
+})
+
+test('RBAC：祖先补全 —— 只勾按钮的角色，codes 必含菜单链', async () => {
+  const permRes = await req('GET', '/permission')
+  const perms = (permRes.json?.data as Array<{ permissionId: string; code: string }>) ?? []
+  const btnId = perms.find((p) => p.code === 'user:delete')?.permissionId ?? ''
+  expect(!!btnId, '应找到 user:delete 按钮')
+
+  // 角色只勾按钮（不勾菜单）——存储侧半选父级不入库的既定契约
+  const createdRole = await req('POST', '/role', { body: { roleName: `brole_anc_${suffix}` } })
+  expectStatus(createdRole, 200)
+  const roleId = (createdRole.json?.data as { roleId?: string })?.roleId ?? ''
+  expectStatus(await req('PATCH', `/role/${roleId}`, { body: { permissions: [btnId] } }), 200)
+
+  // 用户挂该角色后登录：codes 应由聚合期祖先补全出菜单链，且不含根节点
+  const phone = `1991236${String(Date.now()).slice(-4)}`
+  expectStatus(
+    await req('POST', '/user', { body: { phone, password: '123456', roles: [roleId] } }),
+    200,
+  )
+  const loginRes = await req('POST', '/auth/login', {
+    body: { phone, password: '123456' },
+    auth: false,
+  })
+  expectStatus(loginRes, 200)
+  const codes = (loginRes.json?.data?.user as { codes?: string[] })?.codes ?? []
+  expect(codes.includes('user:delete'), 'codes 应含按钮 code')
+  expect(codes.includes('/acl/users'), 'codes 应含祖先菜单 /acl/users')
+  expect(codes.includes('/acl'), 'codes 应含祖先菜单 /acl')
+  expect(!codes.includes('/'), 'codes 不应含根节点 /')
+})
+
+test('RBAC：权限树成环时聚合不死循环（visited 防环）', async () => {
+  // 直连库造环 A→B→A：服务层防环只挡新写入，脏数据/手工写库仍可能产生环
+  await mongoose.connect(process.env.MONGODB_URI!)
+  const col = mongoose.connection.db!.collection('permissions')
+  const now = new Date()
+  // 复合唯一索引 {parentId, sortIndex} 对直连插入同样生效：A 取同级 max+1，避开与根节点（null, 0）冲突
+  const topMax =
+    (await col.find({ parentId: null }).sort({ sortIndex: -1 }).limit(1).next())?.sortIndex ?? -1
+  const a = await col.insertOne({
+    name: '边界环节点A',
+    code: `boundary_cycle_a_${suffix}`,
+    type: 'menu',
+    parentId: null,
+    sortIndex: (topMax as number) + 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  const b = await col.insertOne({
+    name: '边界环节点B',
+    code: `boundary_cycle_b_${suffix}`,
+    type: 'menu',
+    parentId: a.insertedId,
+    sortIndex: 0,
+    createdAt: now,
+    updatedAt: now,
+  })
+  await col.updateOne({ _id: a.insertedId }, { $set: { parentId: b.insertedId } })
+
+  // 角色只挂 A，登录聚合上溯 A→B→A：修复前同步死循环挂死进程，修复后正常返回且含环上已收集 code
+  const createdRole = await req('POST', '/role', { body: { roleName: `brole_cycle_${suffix}` } })
+  expectStatus(createdRole, 200)
+  const roleId = (createdRole.json?.data as { roleId?: string })?.roleId ?? ''
+  expectStatus(
+    await req('PATCH', `/role/${roleId}`, { body: { permissions: [String(a.insertedId)] } }),
+    200,
+  )
+  const phone = `1991239${String(Date.now()).slice(-4)}`
+  expectStatus(
+    await req('POST', '/user', { body: { phone, password: '123456', roles: [roleId] } }),
+    200,
+  )
+  const loginRes = await req('POST', '/auth/login', {
+    body: { phone, password: '123456' },
+    auth: false,
+  })
+  expectStatus(loginRes, 200)
+  const codes = (loginRes.json?.data?.user as { codes?: string[] })?.codes ?? []
+  expect(codes.includes(`boundary_cycle_a_${suffix}`), '应含环节点 A 的 code')
+  expect(codes.includes(`boundary_cycle_b_${suffix}`), '应含环节点 B 的 code（环中断前已收集）')
+})
+
 // ==================== 上传 ====================
 test('上传：非图片文件 → 400', async () => {
   const form = new FormData()
@@ -1673,6 +1978,19 @@ async function bootstrap() {
   token = (reg.json as { data?: { token?: string } })?.data?.token ?? ''
   if (!token) throw new Error('bootstrap 未拿到 token')
   headers = { Authorization: `Bearer ${token}` }
+
+  // RBAC：bootstrap 用户直连库挂 admin 角色（管理接口已加 requirePermission，测试用户须先有管理权）。
+  // 挂角色后立即生效 —— 中间件每次请求实时聚合，无需重新登录换 token
+  await mongoose.connect(process.env.MONGODB_URI!)
+  const adminRoleDoc = await mongoose.connection
+    .db!.collection('roles')
+    .findOne({ roleName: 'admin' })
+  if (!adminRoleDoc) {
+    throw new Error('bootstrap 未找到 admin 角色，请先运行 pnpm run seed:admin')
+  }
+  await mongoose.connection
+    .db!.collection('users')
+    .updateOne({ phone: bootstrapPhone }, { $addToSet: { roles: adminRoleDoc._id } })
 
   // 注册自动生成的默认用户名不稳定 → 改回固定名（keyword 搜索 / 删除自己用例依赖它）
   const me = await req('GET', '/user/info')

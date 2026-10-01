@@ -12,7 +12,6 @@ import { Attr } from '../src/models/Attr.js'
 import { Brand } from '../src/models/Brand.js'
 import { User } from '../src/models/User.js'
 import { Role } from '../src/models/Role.js'
-import { Permission } from '../src/models/Permission.js'
 
 async function main() {
   if (!process.env.MONGODB_URI) {
