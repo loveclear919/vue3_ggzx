@@ -1,6 +1,4 @@
-<script setup lang="ts">
-import { onMounted } from 'vue'
-</script>
+<script setup lang="ts"></script>
 
 <template>
   <h1>我是首页</h1>

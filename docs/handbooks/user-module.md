@@ -68,7 +68,7 @@ password: { select: false }                                // 永不默认查出
 | `PATCH /user/password`（本人） | `oldPassword` + `newPassword` | 独立端点：旧密码 bcrypt 比对（错误 → 400「原密码不正确」），新密码走模型 pre('save') 钩子加密；不并入资料白名单（密码 select: false + 独立生命周期） |
 | `PATCH /user/:id`（管理端） | `username` / `desc` / `roles` | phone 被忽略；密码重置留待独立流程 |
 
-**删除的三重保护**（`services/user.ts:170`）：不能删自己（400）、删除最后一名管理员被拒（409「系统至少保留一名管理员」）、operatorId 来自 JWT（不是请求参数，防止伪造他人身份）。
+**删除保护**（`services/user.ts`，RBAC 阶段闭环）：不能删自己（400）、目标持内置角色需操作者持 `role:grant-super`（403）、「最后一名超管」不可删（403「系统至少保留一名超级管理员」，按聚合持有者集合计数）、operatorId 来自 JWT（不是请求参数，防止伪造他人身份）。管理端三接口均挂 `requirePermission`（列表 `/acl/users`、新增 `user:create`、修改 `user:update`、删除 `user:delete`），roles 变更另验 `user:assign-role`。
 
 ### 3. 搜索与分页
 
@@ -114,13 +114,14 @@ password: { select: false }                                // 永不默认查出
 
 ```bash
 pnpm --filter backend run sync:indexes   # 重建索引（username_1 + phone_1）
-pnpm --filter backend run seed:admin     # 幂等种子管理员：13800138000 / admin123
+pnpm --filter backend run seed:admin     # 幂等种子管理员：13800138000 / 123456
 ```
 
 清空 users 集合后跑上面两条；`seed:admin` 幂等（已存在则只补 admin 角色，不动密码）。
 
 ## 七、如果重构，我会改进…
 
-- **角色数据源**：角色分配抽屉目前是静态 options（admin/user），角色模块落地后换成接口数据，后端同时加 roles 值域校验（白名单值枚举）。
+- **默认角色契约**：`user` 角色按名定位（`DEFAULT_ROLE_NAME`），被改名会让注册报 500「默认角色缺失」，重跑 `seed:admin` 即恢复。这是有意权衡：user 是普通角色（不标 builtin，保留可改可删的灵活性），只有静默塌陷的系统契约（super_admin）才上 builtin 硬保护。
 - **改密后 token 失效策略**：目前改密后旧 token 仍有效（JWT 无版本号），若要求「改密后全端下线」，可加 token 版本号（jti）配合 Redis 黑名单。
 - **管理端重置密码**：目前管理员设初始密码 + 用户自助改密；管理员直接重置他人密码的流程可后续独立（用户明确不做「首次登录强制改密」）。
+- **角色标签判色**：曾按 `roleName === 'super_admin'` 字符串判色，RBAC 阶段改为按 `builtin` 标记——前端不认角色名（名字可改，标记是模型事实）。
