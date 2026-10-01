@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express'
 import type { AuthRequest } from '../middlewares/auth.js'
 import { AppError } from '../utils/AppError.js'
+import { getParamId } from '../utils/paramId.js'
 import { ok } from '../utils/respond.js'
 import * as userService from '../services/user.js'
+import { getPermissionCodesForUser } from '../services/rbac.js'
 
 // 处理层：用户信息接口（当前用户）+ 用户管理接口（列表 / 新增 / 更新 / 删除）
 
@@ -16,7 +18,8 @@ function requireUserId(req: AuthRequest): string {
 
 export async function getInfo(req: AuthRequest, res: Response) {
   const data = await userService.getUserById(requireUserId(req))
-  ok(res, data)
+  const codes = await getPermissionCodesForUser(data.userId)
+  ok(res, { ...data, codes: [...codes] })
 }
 
 export async function updateInfo(req: AuthRequest, res: Response) {
@@ -50,7 +53,7 @@ export async function listUsers(req: Request, res: Response) {
   ok(res, data)
 }
 
-export async function createUser(req: Request, res: Response) {
+export async function createUser(req: AuthRequest, res: Response) {
   const { phone, password, desc, roles } = (req.body ?? {}) as Record<string, unknown>
 
   if (typeof phone !== 'string' || !phone.trim()) {
@@ -66,26 +69,30 @@ export async function createUser(req: Request, res: Response) {
     throw AppError.badRequest('角色格式不合法')
   }
 
-  const data = await userService.createUser(phone, password, desc ?? '', roles ?? [])
+  const data = await userService.createUser(
+    phone,
+    password,
+    desc ?? '',
+    roles ?? [],
+    req.permissionCodes,
+  )
   ok(res, data, '新增成功')
 }
 
-export async function updateUser(req: Request, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少用户 id')
-  }
+export async function updateUser(req: AuthRequest, res: Response) {
+  const id = getParamId(req, '缺少用户 id')
 
-  const data = await userService.updateUser(id, (req.body ?? {}) as Record<string, unknown>)
+  const data = await userService.updateUser(
+    id,
+    (req.body ?? {}) as Record<string, unknown>,
+    req.permissionCodes,
+  )
   ok(res, data, '更新成功')
 }
 
 export async function deleteUser(req: AuthRequest, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少用户 id')
-  }
+  const id = getParamId(req, '缺少用户 id')
 
-  await userService.deleteUser(id, requireUserId(req))
+  await userService.deleteUser(id, requireUserId(req), req.permissionCodes)
   ok(res, null, '删除成功')
 }

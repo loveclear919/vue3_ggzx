@@ -12,8 +12,6 @@ export interface IUser {
   avatar: string
   desc: string
   roles: mongoose.Types.ObjectId[]
-  buttons: string[]
-  routes: string[]
   createdAt: Date
   updatedAt: Date
 }
@@ -63,16 +61,6 @@ const userSchema = new mongoose.Schema<IUser>(
       ref: 'Role',
       default: [],
     },
-
-    buttons: {
-      type: [String],
-      default: [],
-    },
-
-    routes: {
-      type: [String],
-      default: [],
-    },
   },
   {
     timestamps: true,
@@ -89,6 +77,7 @@ userSchema.pre('save', async function () {
 export const User = mongoose.model<IUser>('User', userSchema)
 
 // 对外返回的用户数据 — 隐藏 password，_id 映射为 userId
+// 权限 codes 不在这里：由 controller 调用 rbac 聚合后合并（列表接口不需要逐个聚合，避免 N 次查询）
 export function toUserDTO(user: IUser & { _id: unknown }) {
   return {
     userId: String(user._id),
@@ -97,8 +86,6 @@ export function toUserDTO(user: IUser & { _id: unknown }) {
     avatar: user.avatar,
     desc: user.desc,
     roles: user.roles.map(String),
-    buttons: user.buttons,
-    routes: user.routes,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   }

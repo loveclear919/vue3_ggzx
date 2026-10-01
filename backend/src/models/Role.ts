@@ -4,6 +4,8 @@ export interface IRole {
   roleName: string
   remark: string
   permissions: mongoose.Types.ObjectId[]
+  // 内置角色标记：特权保护的模型事实（不可改名/删除、授予/撤销需持 role:grant-super），不依赖名字约定
+  builtin: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -29,6 +31,10 @@ const roleSchema = new mongoose.Schema<IRole>(
       ref: 'Permission',
       default: [],
     },
+    builtin: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -42,11 +48,13 @@ export function toRoleDTO(role: IRole & { _id: unknown }) {
     roleId: String(role._id),
     roleName: role.roleName,
     remark: role.remark,
-    permissions: role.permissions.map(String),
+    // ?? []：存量角色文档可能没有 permissions 键（权限模块落地前创建），不能假定形状
+    permissions: (role.permissions ?? []).map(String),
+    builtin: role.builtin,
     createdAt: role.createdAt,
     updatedAt: role.updatedAt,
   }
 }
 
-// 默认角色名：注册 / 管理端新增用户未指定角色时兜底分配（名称即约定，角色文档由 seed 保证存在）
+// 默认角色名：注册 / 管理端新增用户未指定角色时兜底分配
 export const DEFAULT_ROLE_NAME = 'user'

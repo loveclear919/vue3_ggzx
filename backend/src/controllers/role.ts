@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import type { AuthRequest } from '../middlewares/auth.js'
 import { AppError } from '../utils/AppError.js'
+import { getParamId } from '../utils/paramId.js'
 import { ok } from '../utils/respond.js'
 import * as roleService from '../services/role.js'
 
@@ -31,21 +32,19 @@ export async function createRole(req: Request, res: Response) {
   ok(res, data, '新增成功')
 }
 
-export async function updateRole(req: Request, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少角色 id')
-  }
+export async function updateRole(req: AuthRequest, res: Response) {
+  const id = getParamId(req, '缺少角色 id')
 
-  const data = await roleService.updateRole(id, (req.body ?? {}) as Record<string, unknown>)
+  const data = await roleService.updateRole(
+    id,
+    (req.body ?? {}) as Record<string, unknown>,
+    req.permissionCodes,
+  )
   ok(res, data, '更新成功')
 }
 
 export async function deleteRole(req: AuthRequest, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少角色 id')
-  }
+  const id = getParamId(req, '缺少角色 id')
 
   await roleService.deleteRole(id)
   ok(res, null, '删除成功')

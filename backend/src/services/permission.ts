@@ -3,7 +3,7 @@ import type { FlattenMaps } from 'mongoose'
 import { Permission, toPermissionDTO } from '../models/Permission.js'
 import type { IPermission } from '../models/Permission.js'
 import { AppError } from '../utils/AppError.js'
-import { isDuplicateKeyError } from '../utils/mongoError.js'
+import { rethrowConflict } from '../utils/mongoError.js'
 import { Role } from '../models/Role.js'
 
 // 全量平铺
@@ -36,10 +36,14 @@ async function validateParentFor(type: string, parentId: string | null, selfId?:
   if (type === 'button' && parent.type !== 'menu') {
     throw AppError.badRequest('按钮的父级必须是菜单')
   }
-  // 环校验
+  // 环校验：防「挂到自己后代」；visited 防「库里已存在环」（脏数据）时上溯死循环
   let cursor: (FlattenMaps<IPermission> & { _id: unknown }) | null = parent
+  const visited = new Set<string>()
   while (cursor) {
-    if (selfId && String(cursor._id) === selfId) {
+    const key = String(cursor._id)
+    if (visited.has(key)) break
+    visited.add(key)
+    if (selfId && key === selfId) {
       throw AppError.badRequest('不能移动到自己的子节点下')
     }
     cursor = cursor.parentId
@@ -102,18 +106,22 @@ export async function createPermission(
     })
     return toPermissionDTO(permission)
   } catch (err) {
-    if (isDuplicateKeyError(err, 'code')) {
-      throw AppError.conflict('权限标识 code 已存在')
-    }
-    if (isDuplicateKeyError(err, 'sortIndex')) {
-      throw AppError.conflict('排序号冲突，请重试')
-    }
-    throw err
+    // 多分支分派：code 与 (parentId, sortIndex) 两种唯一索引冲突给不同文案
+    rethrowConflict(err, ['code', '权限标识 code 已存在'], ['sortIndex', '排序号冲突，请重试'])
   }
 }
 
 // 白名单更新：name / sortIndex / parentId —— code 是稳定身份（前端路由/按钮指令按它对账），创建后不可改
 export async function updatePermission(id: string, body: Record<string, unknown>) {
+  // 根节点保护（rbac-design §4.5）：code '/' 是系统虚拟容器，不可修改
+  const existing = await Permission.findById(id).select('code type parentId').lean()
+  if (!existing) {
+    throw AppError.notFound('权限不存在')
+  }
+  if (existing.code === '/') {
+    throw AppError.forbidden('系统根节点不可修改')
+  }
+
   const patch: Record<string, unknown> = {}
 
   if (body.name !== undefined) {
@@ -140,16 +148,12 @@ export async function updatePermission(id: string, body: Record<string, unknown>
     if (body.parentId !== null && typeof body.parentId !== 'string') {
       throw AppError.badRequest('父级格式不合法')
     }
-    // 层级规则要用目标自身的 type（type 不在白名单）：先查目标，再走与 create 共用的校验链（含环校验）
-    const target = await Permission.findById(id).select('type parentId').lean()
-    if (!target) {
-      throw AppError.notFound('权限不存在')
-    }
     const newParentId = body.parentId === null ? null : body.parentId
     // 父级未变：不 patch 也不重排 —— 否则前端「只改名称」也带 parentId，会把节点静默踢到同级末尾
-    const parentChanged = String(target.parentId ?? null) !== String(newParentId ?? null)
+    const parentChanged = String(existing.parentId ?? null) !== String(newParentId ?? null)
     if (parentChanged) {
-      await validateParentFor(target.type, newParentId, id)
+      // 层级规则用目标自身的 type（type 不在白名单）：走与 create 共用的校验链（含环校验）
+      await validateParentFor(existing.type, newParentId, id)
       patch.parentId = newParentId
       // 跨父移动必须重排：原 sortIndex 是「旧父级下的序号」，直接带过去会与目标父级下的现有节点撞唯一索引（11000）
       // （本次 patch 显式传了 sortIndex 则尊重调用方，不覆盖）
@@ -178,14 +182,19 @@ export async function updatePermission(id: string, body: Record<string, unknown>
     return toPermissionDTO(permission)
   } catch (err) {
     // 唯一索引只有 code 与 (parentId, sortIndex)，code 不在白名单 → 只会撞排序号
-    if (isDuplicateKeyError(err, 'sortIndex')) {
-      throw AppError.conflict('排序号冲突，请重试')
-    }
-    throw err
+    rethrowConflict(err, ['sortIndex', '排序号冲突，请重试'])
   }
 }
 
 export async function deletePermission(id: string) {
+  // 根节点保护：code '/' 是系统虚拟容器，不可删除
+  const target = await Permission.findById(id).select('code').lean()
+  if (!target) {
+    throw AppError.notFound('权限不存在')
+  }
+  if (target.code === '/') {
+    throw AppError.forbidden('系统根节点不可删除')
+  }
   // 子级保护
   const child = await Permission.exists({ parentId: id })
   if (child) {
@@ -231,9 +240,6 @@ export async function swapPermissionSort(id: string, targetId: string) {
     await Permission.updateOne({ _id: b._id }, { $set: { sortIndex: a.sortIndex } })
     await Permission.updateOne({ _id: a._id }, { $set: { sortIndex: b.sortIndex } })
   } catch (err) {
-    if (isDuplicateKeyError(err)) {
-      throw AppError.conflict('排序冲突，请刷新后重试')
-    }
-    throw err
+    rethrowConflict(err, [null, '排序冲突，请刷新后重试'])
   }
 }
