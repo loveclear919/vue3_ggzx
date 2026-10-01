@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useFormSubmit } from '@/composables/useFormSubmit'
+import { confirmDelete } from '@/composables/useDeleteConfirm'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -22,7 +24,6 @@ const {
 
 // ---- 新增 / 编辑（共用一个弹窗） ----
 const dialogVisible = ref(false)
-const submitting = ref(false)
 // null = 新增模式；有值 = 编辑模式（存正在编辑的 brandId）
 const editingId = ref<string | null>(null)
 const dialogTitle = computed(() => (editingId.value ? '编辑品牌' : '新增品牌'))
@@ -55,12 +56,9 @@ const handleEdit = (row: BrandInfo) => {
 }
 
 // 提交：先前端校验，通过后按模式调新增/更新接口
-const handleSubmit = async () => {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  submitting.value = true
-  try {
+const { submitting, submit } = useFormSubmit({
+  formRef,
+  onSuccess: async () => {
     if (editingId.value) {
       await updateBrand(editingId.value, { ...form })
       ElMessage.success('修改成功')
@@ -71,11 +69,11 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     fetchBrandList()
-  } catch {
-    // 失败提示由拦截器弹出（如 409 品牌名称已存在）
-  } finally {
-    submitting.value = false
-  }
+  },
+})
+
+const handleSubmit = () => {
+  void submit()
 }
 
 // ---- 图片上传：复用全局 ImageUploader（选完即传，URL 存进表单；提交时随品牌一起保存） ----
@@ -89,23 +87,15 @@ const logoImages = computed<{ imageUrl: string; imageName: string }[]>({
 
 // ---- 删除 ----
 const handleDelete = async (row: BrandInfo) => {
-  try {
-    await ElMessageBox.confirm(`确定删除品牌「${row.name}」吗？删除后不可恢复`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+  if (
+    await confirmDelete({
+      entity: '品牌',
+      name: row.name,
+      onConfirm: () => deleteBrand(row.brandId),
     })
-  } catch {
-    return // 用户点了取消，静默退出
-  }
-
-  try {
-    await deleteBrand(row.brandId)
-    ElMessage.success('删除成功')
+  ) {
     // 本页删空且非第 1 页 → 回退一页再拉（reloadAfterDelete 内置该编排）
     await reloadAfterDelete()
-  } catch {
-    // 失败提示由拦截器弹出（如 404 品牌不存在）
   }
 }
 
@@ -114,7 +104,14 @@ onMounted(fetchBrandList)
 <template>
   <el-card class="box-card">
     <!-- 工具栏 -->
-    <el-button type="primary" size="large" :icon="Plus" @click="handleAdd">添加品牌</el-button>
+    <el-button
+      v-permission="'brand:create'"
+      type="primary"
+      size="large"
+      :icon="Plus"
+      @click="handleAdd"
+      >添加品牌</el-button
+    >
     <!-- 表格 -->
     <el-table
       class="brand-table"
@@ -150,12 +147,14 @@ onMounted(fetchBrandList)
         <template #default="scope">
           <!-- EP 插槽的 scope.row 默认为宽泛的 DefaultRow，断言回业务类型 -->
           <el-button
+            v-permission="'brand:update'"
             type="primary"
             size="default"
             :icon="Edit"
             @click="handleEdit(scope.row as BrandInfo)"
           ></el-button>
           <el-button
+            v-permission="'brand:delete'"
             type="danger"
             size="default"
             :icon="Delete"

@@ -136,7 +136,12 @@ watch(
         <div class="sku-header">
           <span class="card-title">SKU管理{{ spu ? `（${spu.name}）` : '' }}</span>
           <div class="sku-actions">
-            <el-button v-if="total > 0" type="danger" plain @click="handleClear"
+            <el-button
+              v-permission="'sku:clear'"
+              v-if="total > 0"
+              type="danger"
+              plain
+              @click="handleClear"
               >清空重建</el-button
             >
             <el-button :icon="ArrowLeft" @click="router.push('/product/spu')"
@@ -235,6 +240,7 @@ watch(
             <el-table-column label="操作" width="80" align="center">
               <template #default="scope">
                 <el-button
+                  v-permission="'sku:update'"
                   type="primary"
                   size="default"
                   :icon="Edit"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useFormSubmit } from '@/composables/useFormSubmit'
 import { ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { updateSku } from '@/api/product/sku'
@@ -14,7 +15,6 @@ const emit = defineEmits<{ success: [] }>()
 const dialogVisible = defineModel<boolean>({ required: true })
 
 const formRef = ref<FormInstance>()
-const submitting = ref(false)
 
 const form = ref({
   skuName: '',
@@ -52,28 +52,35 @@ watch(dialogVisible, (opened) => {
   }
 })
 
-const handleSubmit = async () => {
-  if (!props.sku) return
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  const cents = yuanToCents(form.value.priceYuan)
-  if (cents === null) {
-    ElMessage.warning('价格格式不合法（最多两位小数）')
-    return
-  }
-  if (cents > SKU_LIMITS.PRICE_MAX) {
-    ElMessage.warning(`价格不能超过 ${centsToYuan(SKU_LIMITS.PRICE_MAX)} 元`)
-    return
-  }
-  // 上架闸门（与后端同规则）：上架必须有价
-  if (form.value.isSale && cents <= 0) {
-    ElMessage.warning('请先设置价格再上架')
-    return
-  }
-
-  submitting.value = true
-  try {
+const { submitting, submit } = useFormSubmit({
+  formRef,
+  beforeSubmit: () => {
+    // 闭包内 TS 收窄不延续，null 守卫补进回调（调用方 handleSubmit 的守卫无法覆盖到这里）
+    if (!props.sku) return false
+    const cents = yuanToCents(form.value.priceYuan)
+    if (cents === null) {
+      ElMessage.warning('价格格式不合法（最多两位小数）')
+      return false
+    }
+    if (cents > SKU_LIMITS.PRICE_MAX) {
+      ElMessage.warning(`价格不能超过 ${centsToYuan(SKU_LIMITS.PRICE_MAX)} 元`)
+      return false
+    }
+    // 上架闸门（与后端同规则，判生效后状态）：上架/在架必须有价。
+    // 文案按原状态分流：本来就在架 = 改价到 0；本来下架 = 未定价上架
+    if (form.value.isSale && cents <= 0) {
+      if (props.sku.isSale) {
+        ElMessage.warning('在架 SKU 不能改为未定价，请先下架')
+      } else {
+        ElMessage.warning('请先设置价格再上架')
+      }
+      return false
+    }
+    // 检查产物透传：换算好的分由 onSuccess 形参接收，无缓存 ref
+    return cents
+  },
+  onSuccess: async (cents) => {
+    if (!props.sku) return
     await updateSku(props.sku.skuId, {
       skuName: form.value.skuName,
       price: cents,
@@ -85,11 +92,12 @@ const handleSubmit = async () => {
     })
     ElMessage.success('更新成功')
     emit('success')
-  } catch {
-    // 失败提示由拦截器弹出
-  } finally {
-    submitting.value = false
-  }
+  },
+})
+
+const handleSubmit = () => {
+  if (!props.sku) return
+  void submit()
 }
 </script>
 

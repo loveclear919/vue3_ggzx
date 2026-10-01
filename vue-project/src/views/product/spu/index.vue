@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmDelete } from '@/composables/useDeleteConfirm'
 import { computed, onActivated, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
@@ -116,23 +117,15 @@ const handleGoSku = (row: SpuInfo) => {
 
 // ---- 删除 ----
 const handleDelete = async (row: SpuInfo) => {
-  try {
-    await ElMessageBox.confirm(`确定删除 SPU「${row.name}」吗？删除后不可恢复`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+  if (
+    await confirmDelete({
+      entity: 'SPU',
+      name: row.name,
+      onConfirm: () => deleteSpu(row.spuId),
     })
-  } catch {
-    return // 用户取消
-  }
-
-  try {
-    await deleteSpu(row.spuId)
-    ElMessage.success('删除成功')
+  ) {
     // 本页删空且非第 1 页 → 回退一页再拉（reloadAfterDelete 内置该编排）
     await reloadAfterDelete()
-  } catch {
-    // 失败提示由拦截器弹出
   }
 }
 </script>
@@ -157,6 +150,7 @@ const handleDelete = async (row: SpuInfo) => {
                 >SPU列表{{ selectedCategory ? `（${selectedCategory.name}）` : '' }}</span
               >
               <el-button
+                v-permission="'spu:create'"
                 type="primary"
                 :icon="Plus"
                 :disabled="!selectedCategory"
@@ -209,12 +203,14 @@ const handleDelete = async (row: SpuInfo) => {
             <el-table-column label="操作" width="190" align="center">
               <template #default="scope">
                 <el-button
+                  v-permission="'spu:update'"
                   type="primary"
                   size="default"
                   :icon="Edit"
                   @click="handleEdit(scope.row as SpuInfo)"
                 ></el-button>
                 <el-button
+                  v-permission="'spu:delete'"
                   type="danger"
                   size="default"
                   :icon="Delete"

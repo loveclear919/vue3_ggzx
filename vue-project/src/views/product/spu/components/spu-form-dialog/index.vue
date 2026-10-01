@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useFormSubmit } from '@/composables/useFormSubmit'
 import { computed, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getAttrList } from '@/api/product/attr'
@@ -24,7 +25,6 @@ const emit = defineEmits<{ success: [] }>()
 // v-model 双向绑定：defineModel 自动声明 modelValue prop 与 update:modelValue
 const dialogVisible = defineModel<boolean>({ required: true })
 const dialogTitle = computed(() => (props.editingRow ? '编辑SPU' : '新增SPU'))
-const submitting = ref(false)
 
 interface SpuForm {
   name: string
@@ -141,64 +141,65 @@ watch(dialogVisible, (opened) => {
 })
 
 // ---- 提交 ----
-const handleSubmit = async () => {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  // 销售属性名称去重
-  // 去掉前后空格 并去掉假值
-  const saleAttrNames = form.saleAttrList
-    .map((saleAttr) => saleAttr.saleAttrName.trim())
-    .filter(Boolean)
-  if (new Set(saleAttrNames).size !== saleAttrNames.length) {
-    ElMessage.warning('销售属性名不能重复')
-    return
-  }
-
-  // 销售属性值清洗：trim + 去重 + 至少一个值 + 值长度 / 值个数拦截（边界见 SPU_LIMITS）
-  const cleanedSaleAttrList = form.saleAttrList.map((saleAttr) => ({
-    saleAttrName: saleAttr.saleAttrName.trim(),
-    saleAttrValueList: [
-      ...new Set(saleAttr.saleAttrValueList.map((value) => value.trim()).filter(Boolean)),
-    ],
-  }))
-  for (const saleAttr of cleanedSaleAttrList) {
-    if (!saleAttr.saleAttrName || saleAttr.saleAttrValueList.length === 0) {
-      ElMessage.warning('销售属性需填写名称和至少一个值')
-      return
+// beforeSubmit 清洗后把产物透传给 onSuccess（形参接收，无缓存 ref —— 时序契约由类型系统检查）
+const { submitting, submit } = useFormSubmit({
+  formRef,
+  beforeSubmit: () => {
+    // 销售属性名称去重
+    // 去掉前后空格 并去掉假值
+    const saleAttrNames = form.saleAttrList
+      .map((saleAttr) => saleAttr.saleAttrName.trim())
+      .filter(Boolean)
+    if (new Set(saleAttrNames).size !== saleAttrNames.length) {
+      ElMessage.warning('销售属性名不能重复')
+      return false
     }
-    if (saleAttr.saleAttrValueList.length > SPU_LIMITS.MAX_SALE_ATTR_VALUES) {
-      ElMessage.warning(
-        `销售属性「${saleAttr.saleAttrName}」最多 ${SPU_LIMITS.MAX_SALE_ATTR_VALUES} 个值`,
+
+    // 销售属性值清洗：trim + 去重 + 至少一个值 + 值长度 / 值个数拦截（边界见 SPU_LIMITS）
+    const cleanedSaleAttrList = form.saleAttrList.map((saleAttr) => ({
+      saleAttrName: saleAttr.saleAttrName.trim(),
+      saleAttrValueList: [
+        ...new Set(saleAttr.saleAttrValueList.map((value) => value.trim()).filter(Boolean)),
+      ],
+    }))
+    for (const saleAttr of cleanedSaleAttrList) {
+      if (!saleAttr.saleAttrName || saleAttr.saleAttrValueList.length === 0) {
+        ElMessage.warning('销售属性需填写名称和至少一个值')
+        return false
+      }
+      if (saleAttr.saleAttrValueList.length > SPU_LIMITS.MAX_SALE_ATTR_VALUES) {
+        ElMessage.warning(
+          `销售属性「${saleAttr.saleAttrName}」最多 ${SPU_LIMITS.MAX_SALE_ATTR_VALUES} 个值`,
+        )
+        return false
+      }
+      const tooLong = saleAttr.saleAttrValueList.find(
+        (value) => value.length > SPU_LIMITS.SALE_ATTR_VALUE_LENGTH,
       )
-      return
+      if (tooLong) {
+        ElMessage.warning(`销售属性值「${tooLong}」超过 ${SPU_LIMITS.SALE_ATTR_VALUE_LENGTH} 字符`)
+        return false
+      }
     }
-    const tooLong = saleAttr.saleAttrValueList.find(
-      (value) => value.length > SPU_LIMITS.SALE_ATTR_VALUE_LENGTH,
+
+    // 平台属性值清洗：trim + 值长度拦截（valueOptions 仅前端候选，不随 payload 提交）
+    const cleanedAttrList = form.attrList.map((attr) => ({
+      attrName: attr.attrName,
+      attrValue: attr.attrValue.trim(),
+    }))
+    const tooLongAttr = cleanedAttrList.find(
+      (attr) => attr.attrValue.length > SPU_LIMITS.ATTR_VALUE_LENGTH,
     )
-    if (tooLong) {
-      ElMessage.warning(`销售属性值「${tooLong}」超过 ${SPU_LIMITS.SALE_ATTR_VALUE_LENGTH} 字符`)
-      return
+    if (tooLongAttr) {
+      ElMessage.warning(
+        `平台属性「${tooLongAttr.attrName}」的值超过 ${SPU_LIMITS.ATTR_VALUE_LENGTH} 字符`,
+      )
+      return false
     }
-  }
 
-  // 平台属性值清洗：trim + 值长度拦截（valueOptions 仅前端候选，不随 payload 提交）
-  const cleanedAttrList = form.attrList.map((attr) => ({
-    attrName: attr.attrName,
-    attrValue: attr.attrValue.trim(),
-  }))
-  const tooLongAttr = cleanedAttrList.find(
-    (attr) => attr.attrValue.length > SPU_LIMITS.ATTR_VALUE_LENGTH,
-  )
-  if (tooLongAttr) {
-    ElMessage.warning(
-      `平台属性「${tooLongAttr.attrName}」的值超过 ${SPU_LIMITS.ATTR_VALUE_LENGTH} 字符`,
-    )
-    return
-  }
-
-  submitting.value = true
-  try {
+    return { cleanedSaleAttrList, cleanedAttrList }
+  },
+  onSuccess: async ({ cleanedSaleAttrList, cleanedAttrList }) => {
     const payload = {
       name: form.name,
       description: form.description,
@@ -217,11 +218,11 @@ const handleSubmit = async () => {
       ElMessage.success('新增成功')
     }
     emit('success')
-  } catch {
-    // 失败提示由拦截器弹出（如 409 SPU 名称已存在）
-  } finally {
-    submitting.value = false
-  }
+  },
+})
+
+const handleSubmit = () => {
+  void submit()
 }
 </script>
 <template>

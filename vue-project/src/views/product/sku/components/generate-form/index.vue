@@ -161,7 +161,12 @@ const handleGenerate = async () => {
         </el-table-column>
       </el-table>
       <div class="generate-footer">
-        <el-button type="primary" :loading="submitting" @click="handleGenerate">
+        <el-button
+          v-permission="'sku:generate'"
+          type="primary"
+          :loading="submitting"
+          @click="handleGenerate"
+        >
           生成 {{ rows.length }} 个 SKU
         </el-button>
         <span class="generate-tip"

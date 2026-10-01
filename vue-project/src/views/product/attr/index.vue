@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useFormSubmit } from '@/composables/useFormSubmit'
+import { confirmDelete } from '@/composables/useDeleteConfirm'
 import { computed, reactive, ref } from 'vue'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -37,7 +39,6 @@ const fetchAttrList = async () => {
 
 // ---- 新增 / 编辑（共用弹窗） ----
 const dialogVisible = ref(false)
-const submitting = ref(false)
 const editingId = ref<string | null>(null)
 const dialogTitle = computed(() => (editingId.value ? '编辑属性' : '新增属性'))
 
@@ -97,17 +98,13 @@ const removeValue = (index: number) => {
   form.values.splice(index, 1)
 }
 
-const handleSubmit = async () => {
-  // 前置守卫：不用非空断言 —— 断言若被绕过（如键盘触发），TypeError 会被外层 catch 吞掉变成无声失败
-  if (!selectedCategory.value) return
-  // 捕获为局部常量：await 之后 TS 对 ref 属性的收窄不保证延续
-  const categoryId = selectedCategory.value.categoryId
-
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  submitting.value = true
-  try {
+const { submitting, submit } = useFormSubmit({
+  formRef,
+  onSuccess: async () => {
+    // 防御守卫（原 handleSubmit 前置）：分类未选时静默中断，不用非空断言
+    // 捕获为局部常量：await 之后 TS 对 ref 属性的收窄不保证延续
+    const categoryId = selectedCategory.value?.categoryId
+    if (!categoryId) return
     if (editingId.value) {
       await updateAttr(editingId.value, { name: form.name, values: form.values })
       ElMessage.success('修改成功')
@@ -121,31 +118,23 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     fetchAttrList()
-  } catch {
-    // 失败提示由拦截器弹出（如 409 该分类下已存在同名属性）
-  } finally {
-    submitting.value = false
-  }
+  },
+})
+
+const handleSubmit = () => {
+  void submit()
 }
 
 // ---- 删除 ----
 const handleDelete = async (row: AttrInfo) => {
-  try {
-    await ElMessageBox.confirm(`确定删除属性「${row.name}」吗？`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+  if (
+    await confirmDelete({
+      entity: '属性',
+      name: row.name,
+      onConfirm: () => deleteAttr(row.attrId),
     })
-  } catch {
-    return // 用户取消
-  }
-
-  try {
-    await deleteAttr(row.attrId)
-    ElMessage.success('删除成功')
+  ) {
     fetchAttrList()
-  } catch {
-    // 失败提示由拦截器弹出
   }
 }
 </script>
@@ -169,6 +158,7 @@ const handleDelete = async (row: AttrInfo) => {
                 属性列表{{ selectedCategory ? `（${selectedCategory.name}）` : '' }}
               </span>
               <el-button
+                v-permission="'attr:create'"
                 type="primary"
                 size="default"
                 :icon="Plus"
@@ -206,12 +196,14 @@ const handleDelete = async (row: AttrInfo) => {
             <el-table-column label="操作" width="150" align="center">
               <template #default="scope">
                 <el-button
+                  v-permission="'attr:update'"
                   type="primary"
                   size="default"
                   :icon="Edit"
                   @click="handleEdit(scope.row as AttrInfo)"
                 ></el-button>
                 <el-button
+                  v-permission="'attr:delete'"
                   type="danger"
                   size="default"
                   :icon="Delete"
