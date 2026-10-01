@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { useFormSubmit } from '@/composables/useFormSubmit'
+import { computed, ref, watch } from 'vue'
 import { updateUser } from '@/api/acl/user'
 import type { UserRow } from '@/api/acl/user/type'
 import type { RoleRow } from '@/api/acl/role/type'
+import { useUserStore } from '@/stores/user'
 
 // 角色分配抽屉：只改角色（多选框组）。
 // 角色列表由页面持有并传入（表格标签渲染也需要同一份），本组件纯展示 + 提交
@@ -11,30 +13,32 @@ const props = defineProps<{ row: UserRow | null; roleOptions: RoleRow[] }>()
 const emit = defineEmits<{ success: [] }>()
 
 const assignRoles = ref<string[]>([])
-const submitting = ref(false)
+
+// 内置角色选项仅 grant-super 持有者可勾选（体验层禁用；后端 403 仍是裁决）
+const hasGrantSuper = computed(() => useUserStore().hasCode('role:grant-super'))
+const isBuiltinDisabled = (option: RoleRow) => option.builtin && !hasGrantSuper.value
 
 watch(drawerVisible, (opened) => {
   if (!opened || !props.row) return
   assignRoles.value = [...props.row.roles]
 })
 
-const handleSubmit = async () => {
-  if (!props.row) return
-  if (assignRoles.value.length === 0) {
-    ElMessage.warning('至少选择一个角色')
-    return
-  }
-  submitting.value = true
-  try {
+const { submitting, submit } = useFormSubmit({
+  onSuccess: async () => {
+    if (!props.row) return
     await updateUser(props.row.userId, { roles: [...assignRoles.value] })
     ElMessage.success('角色已更新')
     drawerVisible.value = false
     emit('success')
-  } catch {
-    // 失败提示由拦截器弹出
-  } finally {
-    setTimeout(() => (submitting.value = false), 300) // 延迟清除 loading，避免闪烁
+  },
+})
+
+const handleSubmit = () => {
+  if (assignRoles.value.length === 0) {
+    ElMessage.warning('至少选择一个角色')
+    return
   }
+  void submit()
 }
 </script>
 <template>
@@ -45,8 +49,16 @@ const handleSubmit = async () => {
       </el-form-item>
       <el-form-item label="角色">
         <el-checkbox-group v-model="assignRoles">
-          <el-checkbox v-for="option in roleOptions" :key="option.roleId" :value="option.roleId">
+          <el-checkbox
+            v-for="option in roleOptions"
+            :key="option.roleId"
+            :value="option.roleId"
+            :disabled="isBuiltinDisabled(option)"
+          >
             {{ option.roleName }}
+            <el-tag v-if="option.builtin" size="small" type="danger" style="margin-left: 6px"
+              >内置</el-tag
+            >
           </el-checkbox>
         </el-checkbox-group>
       </el-form-item>

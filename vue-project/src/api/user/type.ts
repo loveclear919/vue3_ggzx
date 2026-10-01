@@ -6,7 +6,7 @@ export interface LoginRequest {
   password: string
 }
 
-// 用户信息 — 与后端 toUserDTO 返回结构对齐
+// 用户信息 — 与后端 toUserDTO 返回结构对齐（codes 为 RBAC 聚合结果，登录/注册/getInfo 时后端合并）
 export interface UserInfo {
   userId: string
   username: string
@@ -14,8 +14,7 @@ export interface UserInfo {
   avatar: string
   desc: string
   roles: string[] // 角色 id 数组
-  buttons: string[]
-  routes: string[]
+  codes: string[] // 权限 code 集合（菜单过滤 / v-permission / 守卫判权共用）
 }
 
 // 登录 / 注册返回数据

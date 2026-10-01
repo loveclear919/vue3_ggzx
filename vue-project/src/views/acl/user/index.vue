@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmDelete } from '@/composables/useDeleteConfirm'
 import { ref, watch } from 'vue'
 import { Plus, Edit, Delete, User, Search, Refresh } from '@element-plus/icons-vue'
 import { usePagedList } from '@/composables/usePagedList'
@@ -56,10 +57,9 @@ const fetchRoleOptions = async () => {
 // 找不到对应角色时回退显示 id：防御性回退，不因脏数据破图
 const roleLabel = (roleId: string) =>
   roleOptions.value.find((option) => option.roleId === roleId)?.roleName ?? roleId
+// 按 builtin 标记判色（不认角色名 —— 角色名可改，标记是模型事实）
 const roleTagType = (roleId: string): 'danger' | 'info' =>
-  roleOptions.value.find((option) => option.roleId === roleId)?.roleName === 'super_admin'
-    ? 'danger'
-    : 'info'
+  roleOptions.value.find((option) => option.roleId === roleId)?.builtin ? 'danger' : 'info'
 
 // ---- 新增 / 编辑（表单逻辑在 user-form-dialog 子组件） ----
 const dialogVisible = ref(false)
@@ -100,32 +100,29 @@ const handleAssignSuccess = () => {
 
 // ---- 删除 ----
 const handleDelete = async (row: UserRow) => {
-  try {
-    await ElMessageBox.confirm(`确定删除用户「${row.username}」吗？删除后不可恢复`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+  if (
+    await confirmDelete({
+      entity: '用户',
+      name: row.username,
+      onConfirm: () => deleteUser(row.userId),
     })
-  } catch {
-    return // 用户取消
+  ) {
+    await reloadAfterDelete()
   }
-  try {
-    await deleteUser(row.userId)
-    ElMessage.success('删除成功')
-  } catch {
-    return // 失败提示由拦截器弹出（如不能删自己）
-  }
-  await reloadAfterDelete()
 }
 
 fetchUserList()
-fetchRoleOptions() // 进页面即拉角色列表：角色标签渲染依赖它（不只是抽屉打开时）
+fetchRoleOptions() // 进页面即拉角色列表：角色标签渲染依赖它
 
 // 个人资料改了用户名 → store 刷新
 watch(
   // getter
   () => userStore.userInfo?.username,
-  () => fetchUserList(),
+  () => {
+    // 登出时 userInfo 置 null 也会触发（getter 变 undefined）——此刻 token 已清，发请求会 401
+    if (!userStore.userInfo) return
+    fetchUserList()
+  },
 )
 </script>
 
@@ -147,7 +144,12 @@ watch(
           <el-button type="primary" plain :icon="Refresh" @click="handleReset">重置</el-button>
         </div>
       </template>
-      <el-button class="add-user" type="primary" :icon="Plus" @click="handleAdd"
+      <el-button
+        v-permission="'user:create'"
+        class="add-user"
+        type="primary"
+        :icon="Plus"
+        @click="handleAdd"
         >添加用户</el-button
       >
       <el-table :data="tableData" border stripe v-loading="loading" row-key="userId">
@@ -196,13 +198,25 @@ watch(
         </el-table-column>
         <el-table-column label="操作" min-width="300" align="center">
           <template #default="scope">
-            <el-button type="primary" :icon="User" @click="handleAssign(scope.row as UserRow)"
+            <el-button
+              v-permission="'user:assign-role'"
+              type="primary"
+              :icon="User"
+              @click="handleAssign(scope.row as UserRow)"
               >角色分配</el-button
             >
-            <el-button type="primary" :icon="Edit" @click="handleEdit(scope.row as UserRow)"
+            <el-button
+              v-permission="'user:update'"
+              type="primary"
+              :icon="Edit"
+              @click="handleEdit(scope.row as UserRow)"
               >编辑</el-button
             >
-            <el-button type="danger" :icon="Delete" @click="handleDelete(scope.row as UserRow)"
+            <el-button
+              v-permission="'user:delete'"
+              type="danger"
+              :icon="Delete"
+              @click="handleDelete(scope.row as UserRow)"
               >删除</el-button
             >
           </template>

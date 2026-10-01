@@ -2,3 +2,6 @@
 export const TOKEN_KEY = 'token'
 export const LAST_VISITED_KEY = 'lastVisitedPath'
 export const THEME_KEY = 'themeMode'
+
+// token 清除唯一入口：登出（store）与 401 拦截器共用，杜绝「清了一半」的形态漂移
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY)

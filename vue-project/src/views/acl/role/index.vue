@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { confirmDelete } from '@/composables/useDeleteConfirm'
+import { computed, ref } from 'vue'
 import type { RoleRow } from '@/api/acl/role/type'
 import { Plus, Edit, Delete, Lock } from '@element-plus/icons-vue'
 import { usePagedList } from '@/composables/usePagedList'
@@ -10,6 +11,11 @@ import EditDialog from './components/role-form-dialog/index.vue'
 import PermissionDrawer from './components/permission-drawer/index.vue'
 import type { PermissionRow } from '@/api/acl/permission/type'
 import { getPermissionList } from '@/api/acl/permission/index'
+import { useUserStore } from '@/stores/user'
+
+// 内置角色行对非 grant-super 操作者禁用编辑/分配权限（体验层；后端 403 仍是裁决）
+const hasGrantSuper = computed(() => useUserStore().hasCode('role:grant-super'))
+const isBuiltinBlocked = (row: RoleRow) => row.builtin && !hasGrantSuper.value
 
 // 分页列表
 const {
@@ -38,22 +44,15 @@ const handleEdit = (row: RoleRow) => {
 }
 
 const handleDelete = async (row: RoleRow) => {
-  try {
-    await ElMessageBox.confirm(`确定删除角色「${row.roleName}」吗？删除后不可恢复`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+  if (
+    await confirmDelete({
+      entity: '角色',
+      name: row.roleName,
+      onConfirm: () => deleteRole(row.roleId),
     })
-  } catch {
-    return // 用户取消
+  ) {
+    await reloadAfterDelete()
   }
-  try {
-    await deleteRole(row.roleId)
-    ElMessage.success('删除成功')
-  } catch {
-    return
-  }
-  await reloadAfterDelete()
 }
 
 // 权限
@@ -72,8 +71,8 @@ const fetchPermission = async (): Promise<boolean> => {
 
 // 获取已有权限ID
 const assignPermission = async (row: RoleRow) => {
-  assigningRow.value = row
   if (!(await fetchPermission())) return
+  assigningRow.value = row
   permissionVisible.value = true
 }
 // 拉取
@@ -87,7 +86,12 @@ fetchRoleList()
           <span>角色列表</span>
         </div>
       </template>
-      <el-button class="add-role" type="primary" :icon="Plus" @click="handleAdd"
+      <el-button
+        v-permission="'role:create'"
+        class="add-role"
+        type="primary"
+        :icon="Plus"
+        @click="handleAdd"
         >添加角色</el-button
       >
       <el-table :data="tableData" border stripe v-loading="loading" row-key="roleId">
@@ -118,15 +122,41 @@ fetchRoleList()
         </el-table-column>
         <el-table-column label="操作" min-width="300" align="center">
           <template #default="scope">
-            <el-button type="primary" :icon="Lock" @click="assignPermission(scope.row as RoleRow)"
+            <el-button
+              v-permission="'role:assign-perm'"
+              type="primary"
+              :icon="Lock"
+              :disabled="isBuiltinBlocked(scope.row as RoleRow)"
+              @click="assignPermission(scope.row as RoleRow)"
               >分配权限</el-button
             >
-            <el-button type="primary" :icon="Edit" @click="handleEdit(scope.row as RoleRow)"
+            <el-button
+              v-permission="'role:update'"
+              type="primary"
+              :icon="Edit"
+              :disabled="isBuiltinBlocked(scope.row as RoleRow)"
+              @click="handleEdit(scope.row as RoleRow)"
               >编辑</el-button
             >
-            <el-button type="danger" :icon="Delete" @click="handleDelete(scope.row as RoleRow)"
-              >删除</el-button
+            <!-- 内置角色删除是无条件 403（与操作者无关）：必然失败的操作不给可点入口，禁用 + tooltip 说明原因。
+                 disabled 按钮不触发鼠标事件，tooltip 需包一层 span 承载 -->
+            <el-tooltip
+              content="内置角色不可删除"
+              placement="top"
+              :disabled="!(scope.row as RoleRow).builtin"
             >
+              <span>
+                <el-button
+                  v-permission="'role:delete'"
+                  type="danger"
+                  :icon="Delete"
+                  :disabled="(scope.row as RoleRow).builtin"
+                  @click="handleDelete(scope.row as RoleRow)"
+                  class="deleteBtn"
+                  >删除</el-button
+                >
+              </span>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -167,5 +197,9 @@ fetchRoleList()
 .role-pagination {
   margin-top: 15px;
   justify-content: flex-end;
+}
+
+.deleteBtn {
+  margin-left: 12px;
 }
 </style>

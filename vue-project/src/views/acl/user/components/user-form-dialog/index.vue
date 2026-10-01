@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useFormSubmit } from '@/composables/useFormSubmit'
 import { computed, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { createUser, updateUser } from '@/api/acl/user'
@@ -43,8 +44,6 @@ const formRules = computed<FormRules>(() => ({
       ],
 }))
 
-const submitting = ref(false)
-
 // 打开时按模式填充：编辑回显（密码不回显），新增清空
 watch(dialogVisible, (opened) => {
   if (!opened) return
@@ -59,12 +58,9 @@ watch(dialogVisible, (opened) => {
     : { username: '', phone: '', password: '', desc: '' }
 })
 
-const handleSubmit = async () => {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  submitting.value = true
-  try {
+const { submitting, submit } = useFormSubmit({
+  formRef,
+  onSuccess: async () => {
     if (props.editingRow) {
       await updateUser(props.editingRow.userId, {
         username: form.value.username,
@@ -81,11 +77,11 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     emit('success')
-  } catch {
-    // 失败提示由拦截器弹出（如 409 手机号已存在 / 用户名已存在）
-  } finally {
-    submitting.value = false
-  }
+  },
+})
+
+const handleSubmit = () => {
+  void submit()
 }
 </script>
 <template>

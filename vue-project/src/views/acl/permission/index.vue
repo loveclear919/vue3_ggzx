@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmDelete } from '@/composables/useDeleteConfirm'
 import { onMounted, ref, computed } from 'vue'
 import type { PermissionRow } from '@/api/acl/permission/type'
 import { deletePermission, getPermissionList, swapPermission } from '@/api/acl/permission'
@@ -93,22 +94,15 @@ const handleMove = async (row: PermissionRow, direction: 'up' | 'down') => {
 
 // 删除
 const handleDelete = async (row: PermissionRow) => {
-  try {
-    await ElMessageBox.confirm(`确定删除权限「${row.name}」吗？删除后不可恢复`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+  if (
+    await confirmDelete({
+      entity: '权限',
+      name: row.name,
+      onConfirm: () => deletePermission(row.permissionId),
     })
-  } catch {
-    return // 用户取消
+  ) {
+    await fetchPermission()
   }
-  try {
-    await deletePermission(row.permissionId)
-    ElMessage.success('删除成功')
-  } catch {
-    return // 失败提示由拦截器弹出（如请先删除子级权限 / 该权限已被角色引用）
-  }
-  await fetchPermission()
 }
 
 // 挂载
@@ -149,12 +143,14 @@ onMounted(fetchPermission)
           <template #default="scope">
             <!-- 上移/下移：同层交换排序（邻居表预计算，无邻居时禁用） -->
             <el-button
+              v-permission="'permission:swap'"
               size="small"
               :icon="ArrowUp"
               :disabled="!neighborMaps.upMap.has((scope.row as PermissionRow).permissionId)"
               @click="handleMove(scope.row as PermissionRow, 'up')"
             ></el-button>
             <el-button
+              v-permission="'permission:swap'"
               size="small"
               :icon="ArrowDown"
               :disabled="!neighborMaps.downMap.has((scope.row as PermissionRow).permissionId)"
@@ -162,6 +158,7 @@ onMounted(fetchPermission)
             ></el-button>
             <!-- 行内新增：当前行 = 新节点的父（button 不能有子级，不显示新增） -->
             <el-button
+              v-permission="'permission:create'"
               v-if="(scope.row as PermissionRow).type === 'menu'"
               type="primary"
               :icon="Plus"
@@ -169,10 +166,16 @@ onMounted(fetchPermission)
             >
               新增
             </el-button>
-            <el-button type="primary" :icon="Edit" @click="handleEdit(scope.row as PermissionRow)">
+            <el-button
+              v-permission="'permission:update'"
+              type="primary"
+              :icon="Edit"
+              @click="handleEdit(scope.row as PermissionRow)"
+            >
               编辑
             </el-button>
             <el-button
+              v-permission="'permission:delete'"
               type="danger"
               :icon="Delete"
               @click="handleDelete(scope.row as PermissionRow)"

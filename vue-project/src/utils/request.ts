@@ -23,6 +23,10 @@ request.interceptors.request.use(
   (error) => Promise.reject(error),
 )
 
+// 401 去重标志：并发多请求同时 401（会话过期瞬间多个在途请求）只处理一次，
+// 否则会叠 N 条 toast、且多次 push 竞态导致「URL 变了页面没切」
+let isHandling401 = false
+
 // 响应拦截器
 request.interceptors.response.use(
   (response) => {
@@ -37,14 +41,32 @@ request.interceptors.response.use(
     return Promise.reject(new Error(res.message || '请求失败'))
   },
 
-  (error) => {
+  async (error) => {
     // 后端返回的业务错误信息（HTTP 非 2xx 时藏在响应体里）
     const backendMsg = error.response?.data?.message
 
     if (error.response?.status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
-      ElMessage.error(backendMsg || '登录已过期，请重新登录')
-      router.push('/login')
+      const url: string = error.config?.url ?? ''
+      // 登录/注册自身的 401 是业务错误（密码错）不是会话过期：只弹文案，不做踢出
+      if (url.startsWith('/auth/')) {
+        ElMessage.error(backendMsg || '登录失败')
+        return Promise.reject(error)
+      }
+      if (isHandling401) return Promise.reject(error)
+      isHandling401 = true
+      try {
+        // 状态清理收口到 store 的 logout()（token + userInfo + 权限菜单），与守卫 401 分支同口径。
+        // 动态 import 避免 request → stores/user → api/user → request 的静态循环引用
+        const { useUserStore } = await import('@/stores/user')
+        useUserStore().logout()
+        ElMessage.error(backendMsg || '登录已过期，请重新登录')
+        // 带 redirect：重新登录后回到原页面；replace 不让已失效页面留在历史栈
+        const current = router.currentRoute.value
+        const query = current.path === '/login' ? undefined : { redirect: current.fullPath }
+        await router.replace({ path: '/login', query })
+      } finally {
+        isHandling401 = false
+      }
     } else {
       // 优先显示后端信息，没有才是网络/超时类错误
       ElMessage.error(backendMsg || error.message || '网络错误')

@@ -6,6 +6,7 @@ export interface RoleRow {
   roleName: string
   remark?: string
   permissions: string[]
+  builtin: boolean // 内置角色标记（模型事实，前端不认角色名字符串）
   createdAt: string // ISO 字符串
   updatedAt: string // ISO 字符串
 }

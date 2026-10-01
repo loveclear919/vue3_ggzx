@@ -8,10 +8,13 @@ import '@/styles/index.scss'
 
 import App from '@/App.vue'
 import router from '@/router'
+import { permission } from '@/directives/permission'
 
 const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
+// 按钮级权限指令：v-permission="'user:delete'"（体验层显隐，裁决在后端 403）
+app.directive('permission', permission)
 
 app.mount('#app')

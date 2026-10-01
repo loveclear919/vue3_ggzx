@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useFormSubmit } from '@/composables/useFormSubmit'
 import { computed, ref, watch } from 'vue'
 import type { RoleRow } from '@/api/acl/role/type'
 import { createRole, updateRole } from '@/api/acl/role'
@@ -27,12 +28,9 @@ const formRules: FormRules = {
 }
 
 // 提交表单
-const handleSubmit = async () => {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  submitting.value = true
-  try {
+const { submitting, submit } = useFormSubmit({
+  formRef,
+  onSuccess: async () => {
     if (props.role) {
       await updateRole(props.role.roleId, {
         roleName: form.value.roleName,
@@ -45,11 +43,11 @@ const handleSubmit = async () => {
     }
     emit('success')
     dialogVisible.value = false
-  } catch {
-    // 失败提示由拦截器弹出（如 409 角色名已存在）
-  } finally {
-    submitting.value = false
-  }
+  },
+})
+
+const handleSubmit = () => {
+  void submit()
 }
 
 watch(dialogVisible, (newValue) => {
@@ -69,7 +67,6 @@ watch(dialogVisible, (newValue) => {
 })
 
 // 提交
-const submitting = ref(false)
 </script>
 <template>
   <el-dialog
@@ -84,7 +81,7 @@ const submitting = ref(false)
         <el-input v-model="form.roleName" />
       </el-form-item>
       <el-form-item label="描述" prop="remark">
-        <el-input v-model="form.remark" />
+        <el-input v-model="form.remark" maxlength="200" show-word-limit />
       </el-form-item>
     </el-form>
     <template #footer>

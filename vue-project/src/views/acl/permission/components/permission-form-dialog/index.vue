@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useFormSubmit } from '@/composables/useFormSubmit'
 import { computed, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { createPermission, updatePermission } from '@/api/acl/permission'
@@ -42,8 +43,6 @@ const formRules = computed<FormRules>(() => ({
       ],
   type: props.editingRow ? [] : [{ required: true, message: '请选择权限类型', trigger: 'change' }],
 }))
-
-const submitting = ref(false)
 
 // 父级候选树：
 // 层级规则：button 节点不能当父级 → 禁用；
@@ -89,13 +88,9 @@ watch(dialogVisible, (opened) => {
 })
 
 // 提交
-const handleSubmit = async () => {
-  // 校验form表单
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  submitting.value = true
-  try {
+const { submitting, submit } = useFormSubmit({
+  formRef,
+  onSuccess: async () => {
     if (props.editingRow) {
       await updatePermission(props.editingRow.permissionId, {
         name: form.value.name,
@@ -113,11 +108,11 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     emit('success')
-  } catch {
-    // 失败提示由拦截器弹出（如 409 权限值已存在 / 排序号冲突）
-  } finally {
-    submitting.value = false
-  }
+  },
+})
+
+const handleSubmit = () => {
+  void submit()
 }
 </script>
 <template>

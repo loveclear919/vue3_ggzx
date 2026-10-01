@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useFormSubmit } from '@/composables/useFormSubmit'
 import { computed, ref } from 'vue'
 import type { ElTree } from 'element-plus'
 import type { RoleRow } from '@/api/acl/role/type'
@@ -17,14 +18,19 @@ const root = computed(() =>
 )
 
 const treeRef = ref<InstanceType<typeof ElTree>>()
-const submitting = ref(false)
 
-const handleSubmit = async () => {
-  if (!props.row) return
-  const tree = treeRef.value
-  if (!tree) return
-  submitting.value = true
-  try {
+// 根节点（code '/'）不是权限值：禁用勾选。
+// 注意 EP 语义：disabled 节点的【已勾选状态】仍会被 getCheckedKeys 返回 —— 后端 updateRole 另有静默剔除兜底
+const treeProps = {
+  label: 'name',
+  disabled: (data: { code?: string }) => data.code === '/',
+}
+
+const { submitting, submit } = useFormSubmit({
+  onSuccess: async () => {
+    if (!props.row) return
+    const tree = treeRef.value
+    if (!tree) return
     // 只存 checked（叶子 + 全选父级）：半选父级是推导值，入库会导致回显漂移 + 聚合越权；
     // 回显时 el-tree 会从叶子勾选状态自动推导父级半选/全选
     const checkedIds = tree.getCheckedKeys() as string[]
@@ -32,11 +38,15 @@ const handleSubmit = async () => {
     ElMessage.success('权限已更新')
     permissionVisible.value = false
     emit('success')
-  } catch {
-    // 失败提示由拦截器弹出
-  } finally {
-    submitting.value = false
+  },
+})
+
+const handleSubmit = () => {
+  if (!root.value.length) {
+    ElMessage.warning('权限列表尚未加载，请刷新后重试')
+    return
   }
+  void submit()
 }
 </script>
 <template>
@@ -50,7 +60,7 @@ const handleSubmit = async () => {
         style="max-width: 600px"
         :data="root"
         node-key="id"
-        :props="{ label: 'name' }"
+        :props="treeProps"
         show-checkbox
         :default-checked-keys="props.row?.permissions ?? []"
       />

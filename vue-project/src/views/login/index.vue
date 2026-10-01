@@ -2,10 +2,12 @@
 import { reactive, ref } from 'vue'
 import { Iphone, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/stores/permission'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getTimePeriod } from '@/utils/time'
 import { PHONE_REGEX } from '@/utils/phone'
+import { findFirstAccessiblePath, isPathAccessible } from '@/utils/routeAccess'
 
 const userStore = useUserStore()
 const $router = useRouter()
@@ -73,11 +75,19 @@ const login = async () => {
 
   try {
     await userStore.login(loginForm.phone, loginForm.password)
-    // 支持路由守卫传来的 redirect 参数，登录后跳回原页面
-    const redirect = typeof $route.query.redirect === 'string' ? $route.query.redirect : '/'
+    // 支持路由守卫传来的 redirect 参数，登录后跳回原页面。
+    // 落地页必须可达（permission store 此刻已按 codes 过滤）：
+    // redirect 无权限 / 无 redirect 时回退到第一个可达菜单 —— 无 /home 权限的角色不再停在裸 404
+    const redirect = typeof $route.query.redirect === 'string' ? $route.query.redirect : ''
+    const routes = usePermissionStore().routes
+    const redirectPath = redirect.split('?')[0] ?? ''
+    const target =
+      redirectPath && isPathAccessible(redirectPath, routes)
+        ? redirect
+        : (findFirstAccessiblePath(routes) ?? '/404')
     // 先跳转、后问候：await 等导航完成（含异步路由组件加载、页面挂载），
     // 慢网速下问候弹窗也在页面渲染完之后才登场，而不是对着白屏一闪而过
-    await $router.push(redirect)
+    await $router.push(target)
     ElNotification.success({
       title: `${getTimePeriod()}好!`,
       // 优先展示名（username），未改名时回退到手机号
