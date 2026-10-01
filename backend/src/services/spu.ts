@@ -13,7 +13,7 @@ import { Attr } from '../models/Attr.js'
 import { BaseSaleAttr } from '../models/BaseSaleAttr.js'
 import { AppError } from '../utils/AppError.js'
 import { escapeRegExp } from '../utils/escapeRegExp.js'
-import { isDuplicateKeyError } from '../utils/mongoError.js'
+import { rethrowConflict } from '../utils/mongoError.js'
 import { normalizePage } from '../utils/pagination.js'
 
 // 业务层：SPU 管理
@@ -250,10 +250,7 @@ export async function createSpu(params: CreateSpuParams) {
     })
     return toSpuDTO(spu)
   } catch (err) {
-    if (isDuplicateKeyError(err)) {
-      throw AppError.conflict('SPU 名称已存在')
-    }
-    throw err
+    rethrowConflict(err, [null, 'SPU 名称已存在'])
   }
 }
 
@@ -364,10 +361,7 @@ export async function updateSpu(id: string, updates: Record<string, unknown>) {
     returnDocument: 'after',
     runValidators: true,
   }).catch((err) => {
-    if (isDuplicateKeyError(err)) {
-      throw AppError.conflict('SPU 名称已存在')
-    }
-    throw err
+    rethrowConflict(err, [null, 'SPU 名称已存在'])
   })
   if (!spu) {
     throw AppError.notFound('SPU 不存在')

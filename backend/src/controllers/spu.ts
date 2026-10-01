@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { AppError } from '../utils/AppError.js'
+import { getParamId } from '../utils/paramId.js'
 import { ok } from '../utils/respond.js'
 import * as spuService from '../services/spu.js'
 
@@ -58,21 +59,14 @@ export async function createSpu(req: Request, res: Response) {
 }
 
 export async function updateSpu(req: Request, res: Response) {
-  const id = req.params.id
-  // Express 5 将 params 标为 string | string[]（同名参数可重复），需收窄
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少 SPU id')
-  }
+  const id = getParamId(req, '缺少 SPU id')
 
   const data = await spuService.updateSpu(id, req.body)
   ok(res, data, '更新成功')
 }
 
 export async function deleteSpu(req: Request, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少 SPU id')
-  }
+  const id = getParamId(req, '缺少 SPU id')
 
   await spuService.deleteSpu(id)
   ok(res, null, '删除成功')
@@ -80,10 +74,7 @@ export async function deleteSpu(req: Request, res: Response) {
 
 // SPU 详情：SKU 页刷新后靠它取上下文（名称、销售属性快照、图片），随 SKU 模块补上
 export async function getSpuById(req: Request, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少 SPU id')
-  }
+  const id = getParamId(req, '缺少 SPU id')
 
   const data = await spuService.getSpuById(id)
   ok(res, data)

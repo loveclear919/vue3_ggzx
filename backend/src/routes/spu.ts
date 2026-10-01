@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { auth } from '../middlewares/auth.js'
+import { requirePermission } from '../middlewares/requirePermission.js'
 import * as spuController from '../controllers/spu.js'
 
 // 接线层：SPU 管理（全部需要登录）
@@ -7,10 +8,10 @@ const router = Router()
 
 router.use(auth)
 
-router.get('/', spuController.listSpus)
-router.get('/:id', spuController.getSpuById)
-router.post('/', spuController.createSpu)
-router.patch('/:id', spuController.updateSpu)
-router.delete('/:id', spuController.deleteSpu)
+router.get('/', requirePermission('/product/spu'), spuController.listSpus)
+router.get('/:id', requirePermission('/product/spu', '/product/spu/sku'), spuController.getSpuById)
+router.post('/', requirePermission('spu:create'), spuController.createSpu)
+router.patch('/:id', requirePermission('spu:update'), spuController.updateSpu)
+router.delete('/:id', requirePermission('spu:delete'), spuController.deleteSpu)
 
 export default router

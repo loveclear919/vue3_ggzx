@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { Sku, SKU_LIMITS, toSkuDTO, type ISkuSaleAttrValue } from '../models/Sku.js'
 import { Spu, type ISpuSaleAttr } from '../models/Spu.js'
 import { AppError } from '../utils/AppError.js'
-import { isDuplicateKeyError } from '../utils/mongoError.js'
+import { rethrowConflict } from '../utils/mongoError.js'
 import { normalizePage } from '../utils/pagination.js'
 
 // 业务层：SKU 管理
@@ -284,10 +284,7 @@ export async function generateSkus(spuId: string, items: SkuItemInput[]) {
     return created.map(toSkuDTO)
   } catch (err) {
     // 唯一索引冲突（如并发重复生成）→ 409 而非 500
-    if (isDuplicateKeyError(err)) {
-      throw AppError.conflict('该组合的 SKU 已存在')
-    }
-    throw err
+    rethrowConflict(err, [null, '该组合的 SKU 已存在'])
   }
 }
 
@@ -345,18 +342,20 @@ export async function updateSku(id: string, updates: Record<string, unknown>) {
     throw AppError.badRequest('没有需要更新的字段')
   }
 
-  // 上架必须有价，后端最终拦截
-  if (patch.isSale === true) {
-    const effectivePrice =
-      typeof patch.price === 'number'
-        ? patch.price
-        : (await Sku.findById(id).select('price').lean())?.price
-    if (effectivePrice === undefined) {
-      throw AppError.notFound('SKU 不存在')
-    }
-    if (effectivePrice <= 0) {
+  // 上架闸门（I11）：拦截「生效后状态」而非「请求体」——
+  // 在架 SKU 单请求把 price 改到 0 同样击穿不变量（isSale=true && price=0），必须拦
+  const current = await Sku.findById(id).select('isSale price').lean()
+  if (!current) {
+    throw AppError.notFound('SKU 不存在')
+  }
+  const effectiveIsSale = patch.isSale === undefined ? current.isSale : patch.isSale
+  const effectivePrice = typeof patch.price === 'number' ? patch.price : current.price
+  if (effectiveIsSale && effectivePrice <= 0) {
+    // 显式上架未定价 → 原文案；在架改价到 0 → 需先下架
+    if (patch.isSale === true) {
       throw AppError.badRequest('请先设置价格再上架')
     }
+    throw AppError.badRequest('在架 SKU 不能改为未定价，请先下架')
   }
 
   const sku = await Sku.findByIdAndUpdate(id, patch, {

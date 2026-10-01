@@ -2,7 +2,7 @@ import { Brand, toBrandDTO } from '../models/Brand.js'
 import { Spu } from '../models/Spu.js'
 import { AppError } from '../utils/AppError.js'
 import { escapeRegExp } from '../utils/escapeRegExp.js'
-import { isDuplicateKeyError } from '../utils/mongoError.js'
+import { rethrowConflict } from '../utils/mongoError.js'
 import { normalizePage } from '../utils/pagination.js'
 
 // 业务层：品牌管理（分页列表 / 新增 / 更新 / 删除）
@@ -51,10 +51,7 @@ export async function createBrand(name: string, logoUrl: string) {
     return toBrandDTO(brand)
   } catch (err) {
     // Mongo 11000 重复键错误 → 转成预期错误
-    if (isDuplicateKeyError(err)) {
-      throw AppError.conflict('品牌名称已存在')
-    }
-    throw err
+    rethrowConflict(err, [null, '品牌名称已存在'])
   }
 }
 
@@ -85,10 +82,7 @@ export async function updateBrand(id: string, updates: Record<string, unknown>) 
     runValidators: true,
   }).catch((err) => {
     // 改成已存在的品牌名 → 唯一索引冲突
-    if (isDuplicateKeyError(err)) {
-      throw AppError.conflict('品牌名称已存在')
-    }
-    throw err
+    rethrowConflict(err, [null, '品牌名称已存在'])
   })
   if (!brand) {
     throw AppError.notFound('品牌不存在')

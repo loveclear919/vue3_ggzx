@@ -1,7 +1,7 @@
 import { Attr, ATTR_LIMITS, toAttrDTO } from '../models/Attr.js'
 import { Category } from '../models/Category.js'
 import { AppError } from '../utils/AppError.js'
-import { isDuplicateKeyError } from '../utils/mongoError.js'
+import { rethrowConflict } from '../utils/mongoError.js'
 
 // 业务层：平台属性（归属于三级分类）
 
@@ -58,10 +58,7 @@ export async function createAttr(categoryId: string, name: string, values: strin
     return toAttrDTO(attr)
   } catch (err) {
     // 复合唯一索引（categoryId + name）冲突
-    if (isDuplicateKeyError(err)) {
-      throw AppError.conflict('该分类下已存在同名属性')
-    }
-    throw err
+    rethrowConflict(err, [null, '该分类下已存在同名属性'])
   }
 }
 
@@ -104,10 +101,7 @@ export async function updateAttr(id: string, updates: Record<string, unknown>) {
     runValidators: true,
   }).catch((err) => {
     // 改名撞上同分类已有属性名
-    if (isDuplicateKeyError(err)) {
-      throw AppError.conflict('该分类下已存在同名属性')
-    }
-    throw err
+    rethrowConflict(err, [null, '该分类下已存在同名属性'])
   })
   if (!attr) {
     throw AppError.notFound('属性不存在')

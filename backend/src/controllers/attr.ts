@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { AppError } from '../utils/AppError.js'
+import { getParamId } from '../utils/paramId.js'
 import { ok } from '../utils/respond.js'
 import * as attrService from '../services/attr.js'
 
@@ -41,21 +42,14 @@ export async function createAttr(req: Request, res: Response) {
 
 // 修改
 export async function updateAttr(req: Request, res: Response) {
-  const id = req.params.id
-  // Express 5 将 params 标为 string | string[]（同名参数可重复），需收窄
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少属性 id')
-  }
+  const id = getParamId(req, '缺少属性 id')
 
   const data = await attrService.updateAttr(id, req.body)
   ok(res, data, '更新成功')
 }
 
 export async function deleteAttr(req: Request, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少属性 id')
-  }
+  const id = getParamId(req, '缺少属性 id')
 
   await attrService.deleteAttr(id)
   ok(res, null, '删除成功')

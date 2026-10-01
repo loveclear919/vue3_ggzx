@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { AppError } from '../utils/AppError.js'
+import { getParamId } from '../utils/paramId.js'
 import { ok } from '../utils/respond.js'
 import * as skuService from '../services/sku.js'
 import type { SkuItemInput } from '../services/sku.js'
@@ -88,11 +89,7 @@ export async function generateSkus(req: Request, res: Response) {
 }
 
 export async function updateSku(req: Request, res: Response) {
-  const id = req.params.id
-  // Express 5 将 params 标为 string | string[]（同名参数可重复），需收窄
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少 SKU id')
-  }
+  const id = getParamId(req, '缺少 SKU id')
 
   const data = await skuService.updateSku(id, (req.body ?? {}) as Record<string, unknown>)
   ok(res, data, '更新成功')

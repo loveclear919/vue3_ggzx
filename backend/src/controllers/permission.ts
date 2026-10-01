@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import type { AuthRequest } from '../middlewares/auth.js'
 import { AppError } from '../utils/AppError.js'
+import { getParamId } from '../utils/paramId.js'
 import { ok } from '../utils/respond.js'
 import * as permissionServer from '../services/permission.js'
 
@@ -41,10 +42,7 @@ export async function createPermission(req: Request, res: Response) {
 }
 
 export async function updatePermission(req: Request, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少权限 id')
-  }
+  const id = getParamId(req, '缺少权限 id')
 
   const data = await permissionServer.updatePermission(
     id,
@@ -54,20 +52,14 @@ export async function updatePermission(req: Request, res: Response) {
 }
 
 export async function deletePermission(req: AuthRequest, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少权限 id')
-  }
+  const id = getParamId(req, '缺少权限 id')
 
   await permissionServer.deletePermission(id)
   ok(res, null, '删除成功')
 }
 
 export async function swapPermissionSort(req: Request, res: Response) {
-  const id = req.params.id
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少权限 id')
-  }
+  const id = getParamId(req, '缺少权限 id')
   const { targetId } = (req.body ?? {}) as Record<string, unknown>
   if (typeof targetId !== 'string' || !targetId) {
     throw AppError.badRequest('缺少目标权限 id')

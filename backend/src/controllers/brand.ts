@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { AppError } from '../utils/AppError.js'
+import { getParamId } from '../utils/paramId.js'
 import { ok } from '../utils/respond.js'
 import * as brandService from '../services/brand.js'
 
@@ -33,22 +34,14 @@ export async function createBrand(req: Request, res: Response) {
 }
 
 export async function updateBrand(req: Request, res: Response) {
-  const id = req.params.id
-  // Express 5 将 params 标为 string | string[]（同名参数可重复），需收窄
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少品牌 id')
-  }
+  const id = getParamId(req, '缺少品牌 id')
 
   const data = await brandService.updateBrand(id, req.body)
   ok(res, data, '更新成功')
 }
 
 export async function deleteBrand(req: Request, res: Response) {
-  const id = req.params.id
-  // Express 5 将 params 标为 string | string[]（同名参数可重复），需收窄
-  if (!id || Array.isArray(id)) {
-    throw AppError.badRequest('缺少品牌 id')
-  }
+  const id = getParamId(req, '缺少品牌 id')
 
   await brandService.deleteBrand(id)
   ok(res, null, '删除成功')
