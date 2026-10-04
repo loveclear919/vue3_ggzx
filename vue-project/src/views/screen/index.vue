@@ -162,7 +162,7 @@ const router = useRouter()
           <div class="right">
             <div class="panel todo-panel">
               <div class="panel-title">待办 SKU（共 {{ stats.kpi.pending }} 条）</div>
-              <SkuTodoList :todos="stats.todos" :pending-total="stats.kpi.pending" />
+              <SkuTodoList :todos="stats.todos" />
             </div>
           </div>
 
@@ -247,6 +247,9 @@ const router = useRouter()
   --dash-pad-panel: var(--dash-pad-panel-y) var(--dash-pad-panel-x);
   --dash-chart-h: clamp(180px, 26vh, 280px);
   --dash-ring-size: clamp(110px, 14vh, 180px);
+  /* 待办面板的高度下限：它自己独占一行时（≤768 单列档）这就是它的高度。
+     宽屏下它被右列拉满，这个下限不起作用 —— 见 .todo-panel 的 contain: size */
+  --dash-todo-min-h: clamp(320px, 46vh, 560px);
   /* 左栏要装下「环 + 图例」这一对：环按视口高定尺寸（14vh），图例按内容定下限（min-content，
      11px 字号下实测 117px，留一位数字余量）。列宽不跟着环走，两者就会在某个视口宽度上打架 ——
      图例换行到环下方，左栏多出一个环高，第 1 行行高被顶起来，右栏「待办 SKU」下方随之空出一块
@@ -471,11 +474,20 @@ const router = useRouter()
   }
 }
 
-/* 右列单面板（待办清单）吃掉整列高度：清单越长越占宽度优势，不需要横向拉伸 */
+/* 右列单面板（待办清单）吃掉整列高度：清单越长越占宽度优势，不需要横向拉伸。
+   contain: size —— 尺寸包含，让面板「按列给的高度来，不按内容来」：
+     待办条数由数据决定（SKU 数、待办数都在动），不包含的话清单越长 → 面板越高 → 网格行越高 →
+     整页被顶级出屏幕（实测 30 条就能让页面从 1328 长到 2035）。大屏不该因为待办多就变成两屏。
+     为什么不用 max-height 封顶：封顶只在「列比它矮」时生效，会让面板提前收边，
+     在右列下方留出 117px 空洞（实测 1920×1080）；包含则让面板跟列等高，
+     多出来的清单由内部虚拟列表滚动消化（见 SkuTodoList）。
+   min-height 是它在**独占一行**时（≤768 单列档）的高度来源 —— 尺寸包含后内容不再参与高度计算，
+   没有这个下限面板会塌成 0；窄档下内部列表滚动即可。 */
 .right {
   .todo-panel {
     flex: 1;
-    min-height: 320px;
+    min-height: var(--dash-todo-min-h);
+    contain: size;
   }
 }
 

@@ -123,8 +123,13 @@ function buildCategoryPath(
   return chain.reverse() // 上溯得到的是「三级 → 一级」，返回给前端要正的
 }
 
-// 待办清单上限：大屏是「提示板」不是「工作台」，列头 12 条足够暴露问题
-const TODO_LIMIT = 12
+// 待办清单**不截断**（原 TODO_LIMIT = 12 → 50 已移除）：前端列表是定高 + 虚拟列表，
+// DOM 只渲染窗口内那几行，全量给过去也只是滚动范围变大，用户能翻完所有待办 ——
+// 截断反而跟「查看全部」的诉求冲突。清单仍按「类别优先级 → 货值」排序，翻到最上面就是最该处理的。
+// 代价是响应体随待办数线性增长（每条约 180B：24 位 skuId + 中文商品名/组合）：实测本库 96 条待办
+// = 17.6KB（整个 stats 响应 66KB）；涨到上千条约 200KB，而当前没挂 compression。这个量级在当下
+// 可忽略；等它真的变得不可接受，再改成游标/增量拉取 —— 大屏 30s 轮询一次，本来也只需要增量，
+// 而不是重新在这里砍条数
 
 // 待办类别的展示文案与优先级（模块级常量：聚合循环与排序共用同一份，避免两处口径漂移）
 const TODO_LABELS: Record<TodoCategory, string> = {
@@ -244,7 +249,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     priceBands: PRICE_BAND_LABELS.map((label) => ({ label, count: bandCounts.get(label) ?? 0 })),
     brandTop,
     skuStatus,
-    todos: todos.slice(0, TODO_LIMIT),
+    // 全量待办（不截断，理由见文件上方说明）；因而不截断后 kpi.pending 恒等于 todos.length
+    todos,
     skus: skus.map((s) => ({
       skuId: String(s._id),
       spuId: String(s.spuId),
