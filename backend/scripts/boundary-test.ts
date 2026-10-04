@@ -7,6 +7,7 @@ import mongoose from 'mongoose'
 import { unlink } from 'node:fs/promises'
 import path from 'node:path'
 import { UPLOAD_DIR } from '../src/utils/upload.js'
+import { bucketPrice } from '../src/utils/priceBand.js'
 export {}
 
 const BASE = 'http://localhost:3000/api'
@@ -375,10 +376,11 @@ test('属性：单个值超过 30 字符 → 400', async () => {
 })
 
 // ==================== 基础销售属性（只读） ====================
-test('销售字典：列表 → 200 且 ≥8 条', async () => {
+test('销售字典：列表 → 200 且 ≥7 条', async () => {
   const res = await req('GET', '/base-sale-attr')
   expectStatus(res, 200)
-  expect((res.json?.data as unknown[]).length >= 8, '字典应 ≥8 条')
+  // 字典按三级分类裁剪后基线为 7 条（通用 3 + 特化 4；旧版「尺码」已随种子收敛移除）
+  expect((res.json?.data as unknown[]).length >= 7, '字典应 ≥7 条')
 })
 
 // ==================== SPU ====================
@@ -1086,6 +1088,33 @@ test('SKU上架闸门：定价后再上架 → 200', async () => {
   expectStatus(price, 200)
   const sale = await req('PATCH', `/sku/${gateSkuId}`, { body: { isSale: true } })
   expectStatus(sale, 200)
+})
+
+test('SPU：销售属性跨分类（空调用「套餐」）→ 400', async () => {
+  // 字典按三级分类裁剪：套餐仅配给手机/笔记本/台式机，空调不可用
+  // GET /category 是逐级下钻接口（无参数返回一级），需 家用电器 → 大家电 → 空调 三步
+  const l1 = await req('GET', '/category')
+  const jd = (l1.json?.data as Array<{ categoryId: string; name: string }>) ?? []
+  const jdId = jd.find((c) => c.name === '家用电器')?.categoryId ?? ''
+  expect(!!jdId, '应找到一级分类「家用电器」')
+  const l2 = await req('GET', `/category?parentId=${jdId}`)
+  const dj = (l2.json?.data as Array<{ categoryId: string; name: string }>) ?? []
+  const djId = dj.find((c) => c.name === '大家电')?.categoryId ?? ''
+  expect(!!djId, '应找到二级分类「大家电」')
+  const l3 = await req('GET', `/category?parentId=${djId}`)
+  const ac = (l3.json?.data as Array<{ categoryId: string; name: string }>) ?? []
+  const acId = ac.find((c) => c.name === '空调')?.categoryId ?? ''
+  expect(!!acId, '应找到三级分类「空调」')
+  const res = await req('POST', '/spu', {
+    body: {
+      name: `边界测试跨分类SPU_${suffix}`,
+      brandId,
+      category3Id: acId,
+      saleAttrList: [{ saleAttrName: '套餐', saleAttrValueList: ['裸机'] }],
+    },
+  })
+  expectStatus(res, 400)
+  expectMessage(res, '不适用当前分类')
 })
 
 test('SKU上架闸门：生成时勾选上架但未定价 → 400', async () => {
@@ -1891,6 +1920,185 @@ test('RBAC：权限树成环时聚合不死循环（visited 防环）', async ()
   const codes = (loginRes.json?.data?.user as { codes?: string[] })?.codes ?? []
   expect(codes.includes(`boundary_cycle_a_${suffix}`), '应含环节点 A 的 code')
   expect(codes.includes(`boundary_cycle_b_${suffix}`), '应含环节点 B 的 code（环中断前已收集）')
+})
+
+// ==================== 数据大屏（dashboard-design §4.3，+4 例） ====================
+
+test('大屏：GET /dashboard/stats → 200 且字段形状齐全', async () => {
+  const res = await req('GET', '/dashboard/stats')
+  expectStatus(res, 200)
+  const data = res.json?.data as Record<string, unknown>
+  // monthlyTrend / categoryNodes 已按「方差判据」移除：前者用 createdAt 分组（业务事件时间缺失），
+  // 后者前端零消费。此处断言改为新契约，字段增删应在此同步
+  for (const key of ['kpi', 'priceBands', 'brandTop', 'skuStatus', 'todos', 'skus', 'spus']) {
+    expect(key in data, `响应应含 ${key}`)
+  }
+  for (const gone of ['monthlyTrend', 'categoryNodes']) {
+    expect(!(gone in data), `响应不应再含已移除的 ${gone}`)
+  }
+  expect(
+    Array.isArray(data.priceBands) && (data.priceBands as unknown[]).length === 7,
+    'priceBands 应为 7 档',
+  )
+  expect(Array.isArray(data.todos), 'todos 应为数组')
+})
+
+test('大屏：spus 的分类路径契约（热力图下拉分组/搜索依赖）', async () => {
+  const res = await req('GET', '/dashboard/stats')
+  expectStatus(res, 200)
+  const data = res.json?.data as {
+    spus: Array<{
+      spuId: string
+      name: string
+      categoryPath: Array<{ categoryId: string; name: string }>
+    }>
+  }
+  expect(Array.isArray(data.spus) && data.spus.length > 0, 'spus 应为非空数组')
+  for (const spu of data.spus) {
+    expect(Array.isArray(spu.categoryPath), `${spu.name} 应含 categoryPath 数组`)
+    // 路径必须是「一级 → 三级」的正序：节点 level 递增由下一条与直连库比对保证
+    expect(spu.categoryPath.length <= 3, `${spu.name} 的分类路径不应超过 3 级`)
+    for (const node of spu.categoryPath) {
+      expect(!!node.categoryId && !!node.name, '分类路径节点需含 categoryId 与 name')
+    }
+  }
+
+  // 与直连库对照：路径必须能按 parentId 逐级串成链，且末节点就是该 SPU 的 category3Id
+  await mongoose.connect(process.env.MONGODB_URI!)
+  const db = mongoose.connection.db!
+  const [spuDocs, catDocs] = await Promise.all([
+    db.collection('spus').find().toArray(),
+    db.collection('categories').find().toArray(),
+  ])
+  const parentOf = new Map(
+    catDocs.map((c) => [String(c._id), c.parentId ? String(c.parentId) : null]),
+  )
+  const cat3ById = new Map(spuDocs.map((s) => [String(s._id), String(s.category3Id)]))
+  let checkedWithPath = 0
+  for (const spu of data.spus) {
+    const expectedEnd = cat3ById.get(spu.spuId)
+    if (!expectedEnd || spu.categoryPath.length === 0) continue // 悬空/未分类：允许空数组，跳过
+    checkedWithPath++
+    const last = spu.categoryPath[spu.categoryPath.length - 1]!
+    expect(last.categoryId === expectedEnd, `${spu.name} 分类路径末节点应为其三级分类`)
+    // 正序链校验：第 i 个节点应是第 i+1 个节点的父级
+    for (let i = 0; i < spu.categoryPath.length - 1; i++) {
+      const parent = spu.categoryPath[i]!
+      const child = spu.categoryPath[i + 1]!
+      expect(
+        parentOf.get(child.categoryId) === parent.categoryId,
+        `${spu.name} 分类路径父子顺序应正确`,
+      )
+    }
+  }
+  expect(checkedWithPath > 0, '应至少有一个 SPU 带有可校验的分类路径')
+})
+
+test('大屏：数值与直连库一致 + 状态计数三不变式', async () => {
+  const res = await req('GET', '/dashboard/stats')
+  expectStatus(res, 200)
+  const data = res.json?.data as {
+    kpi: Record<string, number>
+    stockValue: number
+    priceBands: Array<{ label: string; count: number }>
+    brandTop: Array<{ value: number; skuCount: number }>
+    skuStatus: { onSale: number; offPriced: number; offUnpriced: number }
+    todos: Array<{ category: string; price: number; stock: number }>
+  }
+  await mongoose.connect(process.env.MONGODB_URI!)
+  const db = mongoose.connection.db!
+  const skuN = await db.collection('skus').countDocuments()
+  const brandN = await db.collection('brands').countDocuments()
+  const skus = await db.collection('skus').find().toArray()
+  const brandIds = new Set(
+    (await db.collection('spus').find().toArray()).map((s) => String(s.brandId)),
+  )
+  const onSale = skus.filter((s) => s.isSale === true).length
+  const stockValue = skus.reduce((a, s) => a + (s.price || 0) * (s.stock || 0), 0)
+  // 可售 = 已定价 且 在架；待办 = 未定价 ∪ 零库存 ∪ 已定价有货但未上架（互斥分类，不重复计）
+  const sellable = skus.filter((s) => s.price > 0 && s.isSale === true).length
+  const pending = skus.filter((s) => !(s.price > 0) || !(s.stock > 0) || s.isSale !== true).length
+
+  expect(data.kpi.skuCount === skuN, `kpi.skuCount 应为 ${skuN}`)
+  expect(data.kpi.onSale === onSale, `kpi.onSale 应为 ${onSale}`)
+  expect(data.kpi.sellable === sellable, `kpi.sellable 应为 ${sellable}`)
+  expect(
+    data.kpi.sellableRate === (skuN > 0 ? Math.round((sellable / skuN) * 100) : 0),
+    'kpi.sellableRate 应为四舍五入后的百分比整数',
+  )
+  expect(data.kpi.pending === pending, `kpi.pending 应为 ${pending}`)
+  expect(data.kpi.brandTotal === brandN, `kpi.brandTotal 应为 ${brandN}`)
+  expect(
+    data.kpi.brandCovered === brandIds.size,
+    `kpi.brandCovered 应为有 SPU 的品牌数 ${brandIds.size}`,
+  )
+  expect(data.stockValue === stockValue, 'stockValue 应与直连库求和一致')
+  // 三不变式：状态三段互斥完备（合计 = 总数）+ 在架必有价（I11）+ 可售 ⊆ 在架
+  expect(
+    data.skuStatus.onSale + data.skuStatus.offPriced + data.skuStatus.offUnpriced === skuN,
+    'skuStatus 三段之和应等于 SKU 总数',
+  )
+  expect(
+    data.skuStatus.offUnpriced === skus.filter((s) => !(s.price > 0) && s.isSale !== true).length,
+    '下架未定价段应为未定价且未上架数',
+  )
+  expect(data.kpi.sellable <= data.kpi.onSale, '可售（已定价且在架）应 ≤ 在架总数')
+  // 分桶合计 = SKU 总数；品牌货值 TOP 之和 ≤ 全部货值（TOP5 不允许超出总量）
+  const bandSum = data.priceBands.reduce((a, b) => a + b.count, 0)
+  expect(bandSum === skuN, 'priceBands 合计应等于 SKU 总数')
+  expect(
+    data.brandTop.reduce((a, b) => a + b.value, 0) <= stockValue,
+    'brandTop 货值之和应 ≤ 库存总货值',
+  )
+  // 待办清单：非空时必须有 pending 条（可能被截断，故 ≤），且类别只允许三类
+  const validCategories = new Set(['unpriced', 'zeroStock', 'notPublished'])
+  expect(data.todos.length <= data.kpi.pending, 'todos 条数应 ≤ pending 总数（服务端截断）')
+  expect(
+    data.todos.every((t) => validCategories.has(t.category)),
+    'todos.category 只能是三类之一',
+  )
+  expect(
+    data.todos.every((t) => !(t.price > 0) || !(t.stock > 0) || t.category === 'notPublished'),
+    'todos 中的 unpriced/zeroStock 必须真的缺价或缺货',
+  )
+})
+
+test('大屏：无 /screen 权限的角色 → 403', async () => {
+  // 角色名 ≤ 20 字符（模型 maxlength）：brole_scr_ + suffix ≈ 18
+  const created = await req('POST', '/role', { body: { roleName: `brole_scr_${suffix}` } })
+  expectStatus(created, 200)
+  const roleId = (created.json?.data as { roleId?: string })?.roleId ?? ''
+  const phone = `1991232${String(Date.now()).slice(-4)}`
+  expectStatus(
+    await req('POST', '/user', { body: { phone, password: '123456', roles: [roleId] } }),
+    200,
+  )
+  const loginRes = await req('POST', '/auth/login', {
+    body: { phone, password: '123456' },
+    auth: false,
+  })
+  expectStatus(loginRes, 200)
+  const token = (loginRes.json?.data as { token?: string })?.token ?? ''
+  expectStatus(await req('GET', '/dashboard/stats', { token }), 403)
+})
+
+test('大屏：bucketPrice 分档边界（下闭上开语义）', async () => {
+  // 整点价必须落在「标签所指的那一档」：¥100 → 100-500元，而不是 0-100元。
+  // 这是旧实现（price <= 上界）的 off-by-one 修复点，改回 <= 会让本用例失败
+  expect(bucketPrice(0) === '未定价', '0 分 → 未定价')
+  expect(bucketPrice(-1) === '未定价', '负数（脏数据）也归入未定价，不落进真实价格带')
+  expect(bucketPrice(1) === '0-100元', '1 分 → 0-100元')
+  expect(bucketPrice(9999) === '0-100元', '9999 分（¥99.99）→ 0-100元')
+  expect(bucketPrice(10000) === '100-500元', '10000 分（¥100 整）→ 100-500元')
+  expect(bucketPrice(49999) === '100-500元', '49999 分 → 100-500元')
+  expect(bucketPrice(50000) === '500-2000元', '50000 分（¥500 整）→ 500-2000元')
+  expect(bucketPrice(199999) === '500-2000元', '199999 分 → 500-2000元')
+  expect(bucketPrice(200000) === '2000-5000元', '200000 分（¥2000 整）→ 2000-5000元')
+  expect(bucketPrice(499999) === '2000-5000元', '499999 分 → 2000-5000元')
+  expect(bucketPrice(500000) === '5000-10000元', '500000 分（¥5000 整）→ 5000-10000元')
+  expect(bucketPrice(999999) === '5000-10000元', '999999 分 → 5000-10000元')
+  expect(bucketPrice(1000000) === '10000元以上', '1000000 分（¥10000 整）→ 10000元以上')
+  expect(bucketPrice(Number.MAX_SAFE_INTEGER) === '10000元以上', '极大值 → 最后一档')
 })
 
 // ==================== 上传 ====================

@@ -4,6 +4,14 @@ import { TOKEN_KEY } from '@/utils/storage'
 
 // ElMessage 由 unplugin-auto-import 按需注入（含样式），无需手动导入
 
+/**
+ * 静默请求配置：失败时不弹全局 ElMessage，由调用方自己决定怎么呈现。
+ * 用于**后台轮询**这类场景 —— 失败点已有内联提示（如大屏顶栏的「更新失败」），
+ * 再叠一层全局 toast 就是每轮一次噪音，服务一挂就是刷屏。
+ * 注意：401（会话失效）**不受此开关影响**，永远照常弹并跳登录 —— 那是必须打断用户的。
+ */
+export type SilentConfig = AxiosRequestConfig & { silent?: boolean }
+
 const request = axios.create({
   baseURL: import.meta.env.VITE_APP_BASE_API,
   timeout: 10000,
@@ -36,7 +44,9 @@ request.interceptors.response.use(
       return res.data
     }
 
-    ElMessage.error(res.message || '请求失败')
+    if (!(response.config as SilentConfig).silent) {
+      ElMessage.error(res.message || '请求失败')
+    }
 
     return Promise.reject(new Error(res.message || '请求失败'))
   },
@@ -67,7 +77,7 @@ request.interceptors.response.use(
       } finally {
         isHandling401 = false
       }
-    } else {
+    } else if (!(error.config as SilentConfig | undefined)?.silent) {
       // 优先显示后端信息，没有才是网络/超时类错误
       ElMessage.error(backendMsg || error.message || '网络错误')
     }

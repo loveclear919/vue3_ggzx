@@ -7,7 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getTimePeriod } from '@/utils/time'
 import { PHONE_REGEX } from '@/utils/phone'
-import { findFirstAccessiblePath, isPathAccessible } from '@/utils/routeAccess'
+import { findLandingPath, isPathAccessible } from '@/utils/routeAccess'
 
 const userStore = useUserStore()
 const $router = useRouter()
@@ -84,7 +84,7 @@ const login = async () => {
     const target =
       redirectPath && isPathAccessible(redirectPath, routes)
         ? redirect
-        : (findFirstAccessiblePath(routes) ?? '/404')
+        : (findLandingPath(routes, userStore.userInfo?.codes ?? []) ?? '/404')
     // 先跳转、后问候：await 等导航完成（含异步路由组件加载、页面挂载），
     // 慢网速下问候弹窗也在页面渲染完之后才登场，而不是对着白屏一闪而过
     await $router.push(target)

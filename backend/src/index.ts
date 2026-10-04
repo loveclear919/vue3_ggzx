@@ -33,6 +33,7 @@ app.use('/api/attr', (await import('./routes/attr.js')).default)
 app.use('/api/base-sale-attr', (await import('./routes/baseSaleAttr.js')).default)
 app.use('/api/spu', (await import('./routes/spu.js')).default)
 app.use('/api/sku', (await import('./routes/sku.js')).default)
+app.use('/api/dashboard', (await import('./routes/dashboard.js')).default)
 app.use('/api/upload', (await import('./routes/upload.js')).default)
 
 // 上传文件的静态访问：/uploads/xxx.jpg（生产环境建议交给 nginx / 对象存储）

@@ -28,10 +28,12 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.19.0",
+    "echarts": "6.1.0",
     "element-plus": "^2.14.4",
     "nprogress": "^0.2.0",
     "pinia": "^4.0.2",
     "vue": "^3.5.40",
+    "vue-echarts": "8.3.1",
     "vue-router": "^5.2.0"
   },
   "devDependencies": {

@@ -20,11 +20,12 @@ defineOptions({ name: 'Spu' })
 // ---- 逐级下钻分类选择（左侧）：下钻逻辑抽离为全局组件 components/category，本页只响应选中 ----
 const selectedCategory = ref<CategoryFlatNode | null>(null)
 
-// 选中三级分类：重置分页并查该分类下的 SPU 列表
+// 选中三级分类：重置分页、重拉列表与「该分类可见的销售属性字典」（维度按分类裁剪）
 const handleCategorySelect = (node: CategoryFlatNode) => {
   selectedCategory.value = node
   pageNo.value = 1 // 切换分类回到第 1 页
   fetchSpuList()
+  fetchSaleAttrOptions(node.categoryId)
 }
 
 // ---- SPU 列表（右侧） ----
@@ -64,11 +65,23 @@ const fetchSpuList = () => {
 const brandOptions = ref<BrandInfo[]>([])
 const saleAttrOptions = ref<BaseSaleAttrInfo[]>([])
 
+// 销售属性字典按当前三级分类拉取：通用维度恒在，特化维度（网络/套餐/规格）随分类裁剪
+const fetchSaleAttrOptions = async (category3Id?: string) => {
+  try {
+    saleAttrOptions.value = await getBaseSaleAttrList(category3Id)
+  } catch {
+    // 错误提示已由响应拦截器统一弹出；下拉保持空列表，提交时表单校验会拦住
+  }
+}
+
 const fetchOptions = async () => {
   // 品牌与销售属性字典互不依赖，并行拉取
   // all-or-nothing：两个下拉都是弹窗的必填来源，任一失败都提交不了，就没必要做"半个表单可用"的部分成功
   try {
-    const [brands, saleAttrs] = await Promise.all([getAllBrands(), getBaseSaleAttrList()])
+    const [brands, saleAttrs] = await Promise.all([
+      getAllBrands(),
+      getBaseSaleAttrList(selectedCategory.value?.categoryId),
+    ])
     brandOptions.value = brands
     saleAttrOptions.value = saleAttrs
   } catch {

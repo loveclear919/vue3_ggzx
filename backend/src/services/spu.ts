@@ -165,17 +165,27 @@ function ensureAttrNamesValidOnUpdate(
   )
 }
 
-// 销售属性维度名必须来自基础销售属性字典，避免自由文本污染维度集合
-async function ensureSaleAttrNamesValid(saleAttrs: ISpuSaleAttr[]) {
+// 销售属性维度名必须来自字典，且维度须对当前三级分类开放（通用维度 categoryIds 空 = 全分类可用；
+// 特化维度如「网络/套餐」只配了对应分类 —— 空调不能用「套餐」这类跨域维度）
+async function ensureSaleAttrNamesValid(saleAttrs: ISpuSaleAttr[], category3Id: string) {
   if (saleAttrs.length === 0) return
-  const known = new Set(
-    (await BaseSaleAttr.find().select('name').lean()).map((saleAttr) => saleAttr.name),
-  )
-  const unknown = saleAttrs
-    .filter((saleAttr) => !known.has(saleAttr.saleAttrName))
-    .map((saleAttr) => saleAttr.saleAttrName)
+  const dict = await BaseSaleAttr.find().select('name categoryIds').lean()
+  const known = new Map(dict.map((saleAttr) => [saleAttr.name, saleAttr.categoryIds]))
+  const unknown: string[] = []
+  const categoryMismatch: string[] = []
+  for (const saleAttr of saleAttrs) {
+    const categoryIds = known.get(saleAttr.saleAttrName)
+    if (categoryIds === undefined) {
+      unknown.push(saleAttr.saleAttrName)
+    } else if (categoryIds.length > 0 && !categoryIds.some((id) => String(id) === category3Id)) {
+      categoryMismatch.push(saleAttr.saleAttrName)
+    }
+  }
   if (unknown.length > 0) {
     throw AppError.badRequest(`销售属性不存在：${unknown.join('、')}`)
+  }
+  if (categoryMismatch.length > 0) {
+    throw AppError.badRequest(`销售属性不适用当前分类：${categoryMismatch.join('、')}`)
   }
 }
 
@@ -236,7 +246,7 @@ export async function createSpu(params: CreateSpuParams) {
   const attrList = normalizeAttrList(params.attrList)
   const saleAttrList = normalizeSaleAttrList(params.saleAttrList)
   await ensureAttrNamesValid(params.category3Id, attrList)
-  await ensureSaleAttrNamesValid(saleAttrList)
+  await ensureSaleAttrNamesValid(saleAttrList, params.category3Id)
 
   try {
     const spu = await Spu.create({
@@ -339,7 +349,12 @@ export async function updateSpu(id: string, updates: Record<string, unknown>) {
       throw AppError.badRequest('销售属性列表格式不合法')
     }
     const saleAttrList = normalizeSaleAttrList(updates.saleAttrList)
-    await ensureSaleAttrNamesValid(saleAttrList)
+    // 分类不在此接口白名单内（category3Id 创建后不可改）：用 SPU 自身分类校验维度适用性
+    const snapshotForCategory = await Spu.findById(id).select('category3Id').lean()
+    if (!snapshotForCategory) {
+      throw AppError.notFound('SPU 不存在')
+    }
+    await ensureSaleAttrNamesValid(saleAttrList, String(snapshotForCategory.category3Id))
 
     // I6：存在 SKU 时销售属性冻结 —— 组合集变了会让已生成的 SKU 变孤儿。
     // 编辑表单总是带全量 saleAttrList，用规范化形式比对（与顺序无关）：一致才放行

@@ -16,3 +16,81 @@ $base-menu-logo-color: #409eff;
 $base-tabbar-height: 80px;
 // z-index 层级体系：内容区 0 < 外壳(顶部导航) 100 < Element Plus 弹层(2000+)
 $z-tabbar: 100;
+
+// ============================================================
+// 数据大屏（/screen）调色板 —— **样式侧**
+//
+// 大屏恒深色、不参与全局暗黑切换，故自成一套。
+// 这些值原先是散落在 7 个组件里的硬编码字面量（改造前实测：77 处、37 个唯一值、
+// 其中 60 处是重复；同一族 rgba(0,229,255,α) 竟有 15 种不同 α）。
+// 收敛原则：**只做去重与命名，不改任何色值**。
+//
+// 消费方式：由 .screen-canvas 用 #{} 插值暴露为 --dash-* 自定义属性，
+// 子组件靠 CSS 自定义属性的继承拿到，无需 import。
+//
+// ⚠️ 脚本侧（图表 option / 颜色常量）**不能**用这里的值、也不能用 --dash-*：
+//     ECharts 把颜色交给 canvas API，而 canvas 没有 CSS 级联上下文、不解析 var()，
+//     传进去即非法色值（实测回落 #000000 并在控制台刷 illegal color）。
+//     脚本侧请 import '@/styles/dash-tokens.mts'（脚本侧唯一事实源）。
+//
+// 本文件与 dash-tokens.mts 的色值必须保持一致；改色时两处一起改。
+// ============================================================
+
+// —— 底色 / 表面 ——
+$dash-bg-deep: #0b1424; // 页面底 / 图表内深底
+$dash-panel-bg: rgba(16, 31, 56, 0.72); // 面板底
+$dash-overlay-bg: #12233f; // 浮层（下拉面板）底
+$dash-card-gradient: linear-gradient(
+  135deg,
+  rgba(25, 118, 210, 0.14),
+  rgba(0, 229, 255, 0.05)
+); // KPI 卡底
+$dash-mask-bg: rgba(138, 163, 192, 0.06); // 行底纹（待办行）
+$dash-text-fade: rgba(138, 163, 192, 0.1); // 极弱底 / EP fill 占位
+
+// —— 文字（按强调层级递减）——
+$dash-text: #e6f1ff; // 主文字
+$dash-text-dim: #c9dcf2; // 弱化文字
+$dash-text-sub: #8aa3c0; // 次文字（改造前重复 14 次，最高频）
+$dash-text-hint: rgba(138, 163, 192, 0.75); // 提示文字（KPI hint / 脚注合计）
+$dash-text-soft: rgba(138, 163, 192, 0.7); // 辅助文字
+$dash-text-muted: rgba(138, 163, 192, 0.6); // 脚注文字
+$dash-text-faint: rgba(138, 163, 192, 0.5); // 空态 / 禁用
+
+// —— 强调色（accent）——
+$dash-accent: $vivo-cyan; // 主强调色（复用已有令牌，改造前重复 8 次）
+$dash-accent-2: #4da3ff; // 次强调色（渐变起点）
+$dash-brand-gradient: linear-gradient(90deg, $vivo-blue, $vivo-cyan); // 品牌渐变（柱/条）
+$dash-accent-faint: rgba(0, 229, 255, 0.06); // 强调底：最弱（按钮静息）
+$dash-accent-mid: rgba(0, 229, 255, 0.08); // 强调底：选中态
+$dash-accent-soft: rgba(0, 229, 255, 0.14); // 强调底：悬停
+
+// —— 描边 / 分隔 ——
+$dash-border-strong: rgba(0, 229, 255, 0.7); // 悬停描边
+$dash-border-btn: rgba(0, 229, 255, 0.35); // 按钮描边
+$dash-border: rgba(0, 229, 255, 0.3); // 常规描边
+$dash-accent-line: rgba(0, 229, 255, 0.25); // 强调线（分组描边）
+$dash-border-soft: rgba(0, 229, 255, 0.16); // 弱描边（面板）
+$dash-accent-glow: rgba(0, 229, 255, 0.5); // 强调光带（面板顶部装饰线中段）
+$dash-accent-border: rgba(0, 229, 255, 0.4); // 强调描边（较实）
+$dash-divider: rgba(138, 163, 192, 0.12); // 分组分隔线
+$dash-grid-line: rgba(138, 163, 192, 0.15); // ECharts 网格线
+
+// —— 语义色 ——
+$dash-warn: #fab219; // 警示（待定价 / 更新失败）
+$dash-danger: #f56c6c; // 异常（零库存）
+$dash-status-good: #0ca30c; // 状态：在架
+$dash-status-idle: #5b6b82; // 状态：下架已定价（中性）
+
+// —— 热力图色阶 ——
+$dash-cell-low: #163e6e; // 色阶低端
+$dash-cell-empty: #2a3346; // 零库存格
+
+// —— 视口装饰 ——
+$dash-grid-texture: rgba(140, 170, 210, 0.05); // 底纹方格
+$dash-glow-blue: rgba(25, 118, 210, 0.16); // 左上光晕
+$dash-glow-cyan: rgba(0, 229, 255, 0.1); // 右下光晕
+
+// —— Element Plus 骨架屏（喂给 EP 的 --el-skeleton-*）——
+$dash-skeleton: rgba(138, 163, 192, 0.14);
+$dash-skeleton-to: rgba(138, 163, 192, 0.3);

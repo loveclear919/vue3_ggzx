@@ -12,12 +12,6 @@ export const menuRoutes: RouteRecordRaw[] = [
     meta: { title: '首页', icon: 'HomeFilled', hidden: false, code: '/home' },
   },
   {
-    path: '/screen',
-    name: 'screen',
-    component: () => import('@/views/screen/index.vue'),
-    meta: { title: '数据大屏', icon: 'Monitor', hidden: false, code: '/screen' },
-  },
-  {
     path: '/acl',
     name: 'acl',
     redirect: '/acl/users',
@@ -89,6 +83,15 @@ export const constantRoutes = [
     name: 'login',
     component: () => import('@/views/login/index.vue'),
     meta: { title: '登录', hidden: true },
+  },
+  {
+    // 顶级独立路由：不经 layout 外壳渲染（无侧栏/顶栏），当前窗口整页打开；
+    // 从根上避开 layout 内 keep-alive/transition 嵌套产生的视图冻结问题
+    path: '/screen',
+    name: 'screen',
+    component: () => import('@/views/screen/index.vue'),
+    // code 保留：守卫按它做权限拦截（首页入口卡片的 v-permission 同理）
+    meta: { title: '数据大屏', hidden: true, code: '/screen' },
   },
   {
     path: '/',

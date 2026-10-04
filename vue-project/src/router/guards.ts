@@ -7,7 +7,7 @@ import type {
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { LAST_VISITED_KEY, TOKEN_KEY } from '@/utils/storage'
-import { findFirstAccessiblePath, isPathAccessible } from '@/utils/routeAccess'
+import { findLandingPath, isPathAccessible } from '@/utils/routeAccess'
 import { isAxiosError } from 'axios'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
@@ -38,11 +38,11 @@ export const authGuard: NavigationGuardWithThis<undefined> = async (to) => {
         permissionStore.buildMenuRoutes(userStore.userInfo.codes)
       }
       if (lastPath && !isPathAccessible(lastPath, permissionStore.routes)) {
-        return findFirstAccessiblePath(permissionStore.routes) || '/'
+        return findLandingPath(permissionStore.routes, userStore.userInfo.codes) || '/'
       }
     }
     // userInfo 未恢复（刷新直达登录页）：fail-open 先去，下一跳拉取后再判权
-    return last || findFirstAccessiblePath(permissionStore.routes) || '/'
+    return last || findLandingPath(permissionStore.routes, userStore.userInfo?.codes ?? []) || '/'
   }
   // 白名单直接放行
   if (whiteList.includes(to.path)) {
@@ -78,7 +78,7 @@ export const authGuard: NavigationGuardWithThis<undefined> = async (to) => {
     // 手输 URL 越权 → 404（信息隐藏：不暴露资源存在性）
     const lastPath = (localStorage.getItem(LAST_VISITED_KEY) || '').split('?')[0]
     if (to.path === lastPath) {
-      return findFirstAccessiblePath(permissionStore.routes) ?? '/404'
+      return findLandingPath(permissionStore.routes, userStore.userInfo.codes) ?? '/404'
     }
     return '/404'
   }

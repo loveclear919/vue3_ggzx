@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { usePermissionStore } from '@/stores/permission'
-import { findFirstAccessiblePath } from '@/utils/routeAccess'
+import { useUserStore } from '@/stores/user'
+import { findLandingPath } from '@/utils/routeAccess'
 
 const router = useRouter()
 
 // 返回入口走第一个可达菜单（而非写死 /home）：无该权限的角色不会又被弹回 404 死循环
 const goHome = () => {
-  const path = findFirstAccessiblePath(usePermissionStore().routes) ?? '/'
+  const path =
+    findLandingPath(usePermissionStore().routes, useUserStore().userInfo?.codes ?? []) ?? '/'
   router.push(path)
 }
 </script>
