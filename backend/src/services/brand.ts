@@ -31,7 +31,8 @@ export async function listBrands({ page, pageSize, keyword }: ListBrandsParams) 
     Brand.find(filter)
       .sort({ createdAt: -1 })
       .skip((safePage - 1) * safePageSize)
-      .limit(safePageSize),
+      .limit(safePageSize)
+      .lean(),
     Brand.countDocuments(filter),
   ])
 
@@ -40,7 +41,7 @@ export async function listBrands({ page, pageSize, keyword }: ListBrandsParams) 
 
 // 全量品牌（SPU 表单的品牌下拉用）：不分页，按创建时间升序
 export async function listAllBrands() {
-  const list = await Brand.find().sort({ createdAt: 1 })
+  const list = await Brand.find().sort({ createdAt: 1 }).lean()
   return list.map(toBrandDTO)
 }
 

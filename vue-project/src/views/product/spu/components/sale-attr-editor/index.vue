@@ -4,10 +4,17 @@ import type { SpuSaleAttr } from '@/api/product/spu/type'
 import type { BaseSaleAttrInfo } from '@/api/product/baseSaleAttr/type'
 import { SPU_LIMITS } from '../../constants'
 
-// 销售属性动态行编辑器：维度名下拉（字典）+ 多值输入 + 行增删
-// 行数上限见 SPU_LIMITS.MAX_SALE_ATTR_COUNT；值级校验（去重/长度/个数）由弹窗提交时负责
+// 销售属性动态行编辑器：维度名下拉（字典）+ 多值标签输入 + 行增删
+// 行数上限见 SPU_LIMITS.MAX_SALE_ATTR_COUNT；值级长度/个数校验由弹窗提交时负责
 const model = defineModel<SpuSaleAttr[]>({ required: true })
 defineProps<{ options: BaseSaleAttrInfo[] }>()
+
+const updateValues = (saleAttr: SpuSaleAttr, values?: string[]) => {
+  const next = values ?? []
+  const unique = next.filter((value, index) => next.indexOf(value) === index)
+  if (unique.length !== next.length) ElMessage.warning('属性值已存在')
+  saleAttr.saleAttrValueList = unique
+}
 
 const addSaleAttr = () => {
   if (model.value.length >= SPU_LIMITS.MAX_SALE_ATTR_COUNT) {
@@ -37,14 +44,10 @@ const removeSaleAttr = (index: number) => {
           :value="opt.name"
         />
       </el-select>
-      <el-select
-        v-model="saleAttr.saleAttrValueList"
-        multiple
-        filterable
-        allow-create
-        default-first-option
-        placeholder="输入/选择属性值"
+      <el-input-tag
+        :model-value="saleAttr.saleAttrValueList"
         class="sale-attr-values"
+        @update:model-value="(values) => updateValues(saleAttr, values)"
       />
       <el-button :icon="Delete" @click="removeSaleAttr(index)"></el-button>
     </div>

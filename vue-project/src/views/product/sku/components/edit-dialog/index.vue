@@ -54,7 +54,7 @@ watch(dialogVisible, (opened) => {
 
 const { submitting, submit } = useFormSubmit({
   formRef,
-  beforeSubmit: () => {
+  beforeSubmit: async () => {
     // 闭包内 TS 收窄不延续，null 守卫补进回调（调用方 handleSubmit 的守卫无法覆盖到这里）
     if (!props.sku) return false
     const cents = yuanToCents(form.value.priceYuan)
@@ -75,6 +75,20 @@ const { submitting, submit } = useFormSubmit({
         ElMessage.warning('请先设置价格再上架')
       }
       return false
+    }
+    // 零库存上架软提醒（与列表页开关同一条规则）：只拦「本次保存新造出售罄状态」——
+    // 给一条本来就是售罄的 SKU 改名字、改描述不该被问「确认上架？」，所以先算原状态
+    const wasSoldOut = props.sku.isSale && props.sku.stock <= 0
+    if (form.value.isSale && form.value.stock <= 0 && !wasSoldOut) {
+      try {
+        await ElMessageBox.confirm(
+          '该 SKU 保存后为「在架 + 零库存」，将显示为售罄。确认保存吗？',
+          '零库存上架',
+          { type: 'warning', confirmButtonText: '确认保存', cancelButtonText: '取消' },
+        )
+      } catch {
+        return false // 用户取消：中断提交，表单内容原样保留
+      }
     }
     // 检查产物透传：换算好的分由 onSuccess 形参接收，无缓存 ref
     return cents

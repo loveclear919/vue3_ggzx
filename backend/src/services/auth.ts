@@ -11,7 +11,7 @@ import * as userService from './user.js'
 export async function register(phone: string, password: string) {
   // roles 传空数组：createUser 内部兜底分配默认「普通用户」角色（按名查角色文档拿 id）
   const user = await userService.createUser(phone, password, '', [])
-  const token = jwt.sign({ userId: user.userId }, process.env.JWT_SECRET!, { expiresIn: '7d' })
+  const token = jwt.sign({ userId: user.userId }, process.env.JWT_SECRET!, { expiresIn: '2h' })
 
   return { token, user }
 }
@@ -29,7 +29,7 @@ export async function login(phone: string, password: string) {
     throw AppError.unauthorized('手机号或密码错误')
   }
 
-  const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET!, { expiresIn: '7d' })
+  const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET!, { expiresIn: '2h' })
 
   return { token, user: toUserDTO(user) }
 }

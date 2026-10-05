@@ -20,7 +20,10 @@ import { bucketPrice, emptyBandCounts, PRICE_BAND_LABELS } from '../utils/priceB
 export interface DashboardKpi {
   // SKU 总数（各种比率的隐含分母）
   skuCount: number
-  // 可售 SKU = 已定价 且 在架：大屏唯一的「健康度」总量指标
+  // 可售 SKU = 已定价 且 在架 且 有货：大屏唯一的「健康度」总量指标
+  // 「有货」这一项不能省：上架闸门只保证「在架 ⇒ 已定价」不含库存（在架+零库存 = 售罄，
+  // 是正常经营状态，不该被拦），但售罄的商品买不走，不能计入「现在能买到」——
+  // 漏掉它，sellable 会恒等于 onSale（见下方累积处的说明）
   sellable: number
   // 可售率（0~100 整数，后端算好，前端不做除法）
   sellableRate: number
@@ -172,7 +175,10 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     else if (priced) skuStatus.offPriced++
     else skuStatus.offUnpriced++
 
-    if (sku.isSale && priced) sellable++
+    // 可售 = 能真正被买走：定价 ∧ 在架 ∧ 有货。
+    // 缺了「有货」这项，因上架闸门保证「在架 ⇒ 已定价」，sellable 会恒等于 onSale，
+    // 可售率就成了在架率的复读机（两张 KPI 卡指向同一个数）
+    if (sku.isSale && priced && inStock) sellable++
     stockValue += (sku.price ?? 0) * (sku.stock ?? 0)
     const band = bucketPrice(sku.price)
     bandCounts.set(band, (bandCounts.get(band) ?? 0) + 1)

@@ -2015,8 +2015,8 @@ test('大屏：数值与直连库一致 + 状态计数三不变式', async () =>
   )
   const onSale = skus.filter((s) => s.isSale === true).length
   const stockValue = skus.reduce((a, s) => a + (s.price || 0) * (s.stock || 0), 0)
-  // 可售 = 已定价 且 在架；待办 = 未定价 ∪ 零库存 ∪ 已定价有货但未上架（互斥分类，不重复计）
-  const sellable = skus.filter((s) => s.price > 0 && s.isSale === true).length
+  // 可售 = 已定价 且 在架 且 有货；待办 = 未定价 ∪ 零库存 ∪ 已定价有货但未上架（互斥分类，不重复计）
+  const sellable = skus.filter((s) => s.price > 0 && s.stock > 0 && s.isSale === true).length
   const pending = skus.filter((s) => !(s.price > 0) || !(s.stock > 0) || s.isSale !== true).length
 
   expect(data.kpi.skuCount === skuN, `kpi.skuCount 应为 ${skuN}`)
@@ -2042,7 +2042,7 @@ test('大屏：数值与直连库一致 + 状态计数三不变式', async () =>
     data.skuStatus.offUnpriced === skus.filter((s) => !(s.price > 0) && s.isSale !== true).length,
     '下架未定价段应为未定价且未上架数',
   )
-  expect(data.kpi.sellable <= data.kpi.onSale, '可售（已定价且在架）应 ≤ 在架总数')
+  expect(data.kpi.sellable <= data.kpi.onSale, '可售（已定价且在架且有货）应 ≤ 在架总数')
   // 分桶合计 = SKU 总数；品牌货值 TOP 之和 ≤ 全部货值（TOP5 不允许超出总量）
   const bandSum = data.priceBands.reduce((a, b) => a + b.count, 0)
   expect(bandSum === skuN, 'priceBands 合计应等于 SKU 总数')
@@ -2050,9 +2050,9 @@ test('大屏：数值与直连库一致 + 状态计数三不变式', async () =>
     data.brandTop.reduce((a, b) => a + b.value, 0) <= stockValue,
     'brandTop 货值之和应 ≤ 库存总货值',
   )
-  // 待办清单：非空时必须有 pending 条（可能被截断，故 ≤），且类别只允许三类
+  // 待办清单：不截断（TODO_LIMIT 已移除），条数应等于直连库算出的待办总数，且类别只允许三类
   const validCategories = new Set(['unpriced', 'zeroStock', 'notPublished'])
-  expect(data.todos.length <= data.kpi.pending, 'todos 条数应 ≤ pending 总数（服务端截断）')
+  expect(data.todos.length === pending, 'todos 条数应等于待办总数（不截断）')
   expect(
     data.todos.every((t) => validCategories.has(t.category)),
     'todos.category 只能是三类之一',

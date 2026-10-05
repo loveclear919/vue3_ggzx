@@ -75,6 +75,22 @@ const handleGenerate = async () => {
     }
   }
 
+  // 零库存上架软提醒（三处入口同一条规则：列表开关 / 编辑弹窗 / 这里）。
+  // 生成时勾了上架但库存为 0 的行都是新造的「售罄」，聚合成一次确认 ——
+  // 逐行弹窗会把批量操作打断 N 次，而这里用户本来就该逐行核对过表格
+  const soldOutCount = rows.value.filter((row) => row.isSale && row.stock <= 0).length
+  if (soldOutCount > 0) {
+    try {
+      await ElMessageBox.confirm(
+        `有 ${soldOutCount} 个 SKU 为「在架 + 零库存」，将显示为售罄。确认生成吗？`,
+        '零库存上架',
+        { type: 'warning', confirmButtonText: '确认生成', cancelButtonText: '取消' },
+      )
+    } catch {
+      return // 用户取消：不提交，表格内容原样保留
+    }
+  }
+
   submitting.value = true
   try {
     await generateSkus({

@@ -62,6 +62,19 @@ const handleToggleSale = async (row: SkuInfo, isSale: boolean) => {
     ElMessage.warning('请先设置价格再上架')
     return
   }
+  // 零库存可以上架（在架 + 无货 = 售罄，是正常经营状态：硬拦会导致卖断货被强制下架、
+  // 补货后还要人工重新上架），但一次点击就改了状态、库存列容易被忽略，软提醒确认一次
+  if (isSale && row.stock <= 0) {
+    try {
+      await ElMessageBox.confirm(
+        '该 SKU 当前库存为 0，上架后将显示为售罄。确认上架吗？',
+        '零库存上架',
+        { type: 'warning', confirmButtonText: '确认上架', cancelButtonText: '取消' },
+      )
+    } catch {
+      return // 用户取消：开关是单向绑定（:model-value 不回写），列表未重拉，视图自动回落
+    }
+  }
   try {
     await updateSku(row.skuId, { isSale })
     if (isSale) {

@@ -3,7 +3,7 @@
 export interface DashboardKpi {
   /** SKU 总数（各比率的隐含分母） */
   skuCount: number
-  /** 可售 SKU = 已定价 且 在架 */
+  /** 可售 SKU = 已定价 且 在架 且 有货（能真正被买走；在架+零库存 = 售罄，不计入） */
   sellable: number
   /** 可售率 0~100（后端算好，前端不做除法） */
   sellableRate: number

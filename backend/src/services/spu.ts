@@ -363,7 +363,7 @@ export async function updateSpu(id: string, updates: Record<string, unknown>) {
       (await Sku.countDocuments({ spuId: id })) > 0 &&
       canonicalSaleAttrList(snapshot.saleAttrList) !== canonicalSaleAttrList(saleAttrList)
     ) {
-      throw AppError.conflict('请先删除该 SPU 下的 SKU')
+      throw AppError.conflict('更改 SPU 前请先删除该 SPU 下的 SKU')
     }
     patch.saleAttrList = saleAttrList
   }
@@ -387,7 +387,7 @@ export async function updateSpu(id: string, updates: Record<string, unknown>) {
 export async function deleteSpu(id: string) {
   // I6：先查 SKU 引用（不存在的 SPU 自然计数为 0，404 由下面的删除结果收口）
   if (await Sku.countDocuments({ spuId: id })) {
-    throw AppError.conflict('请先删除该 SPU 下的 SKU')
+    throw AppError.conflict('删除 SPU 前请先删除该 SPU 下的 SKU')
   }
   const spu = await Spu.findByIdAndDelete(id)
   if (!spu) {
