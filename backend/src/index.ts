@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import { connectDB } from './config/db.js'
 import { errorHandler } from './middlewares/errorHandler.js'
 import { limiter } from './middlewares/rateLimiter.js'
@@ -17,6 +18,8 @@ app.use(helmet())
 
 // 中间件
 app.use(cors())
+// gzip 压缩：统计接口的 JSON 响应体量可观（dashboard 全量快照），压缩后约省 70% 传输
+app.use(compression())
 app.use(express.json({ limit: '1mb' }))
 
 // 限流
@@ -38,7 +41,9 @@ app.use('/api/upload', (await import('./routes/upload.js')).default)
 
 // 上传文件的静态访问：/uploads/xxx.jpg（生产环境建议交给 nginx / 对象存储）
 // UPLOAD_DIR 与 upload.ts 共用同一锚定路径，杜绝「建在 A 处、找 B 处」的漂移
-app.use('/uploads', express.static(UPLOAD_DIR))
+// maxAge 一年 + immutable：上传文件名是「时间戳+随机 hex」，同名文件内容永不变，
+// 强缓存后可让浏览器完全跳过二次请求（etag 仅兜底）
+app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '365d', immutable: true }))
 
 // 404 ：未匹配任何路由，统一返回 JSON 而不是 Express 默认的 HTML
 app.use((_req, _res, next) => next(AppError.notFound()))

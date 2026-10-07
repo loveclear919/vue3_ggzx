@@ -73,4 +73,24 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // vendor 拆包（实测定案）：只拆 vue 生态 —— 入口 chunk 从 247KB 降到 151KB，
+        // 业务代码哈希与库解耦，发版只失效业务 chunk；
+        // Element Plus 不拆：unplugin 按组件引入时，把 EP 整体塞进单 chunk 会让
+        // 首页被迫加载整库（实测入口 247→658KB，按需引入失效），维持默认按模块拆分。
+        // 注意：Vite 8 构建内核是 Rolldown，manualChunks 只接受函数（Rollup 旧版的对象写法已被移除）
+        manualChunks(id) {
+          if (
+            id.includes('node_modules') &&
+            /node_modules[\\/](vue|vue-router|pinia)[\\/]/.test(id)
+          ) {
+            return 'vue-vendor'
+          }
+          return undefined
+        },
+      },
+    },
+  },
 })

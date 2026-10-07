@@ -57,7 +57,7 @@ const removeImage = (index: number) => {
 <template>
   <div class="image-editor">
     <div v-for="(image, index) in model" :key="image.imageUrl" class="image-item">
-      <el-image :src="image.imageUrl" fit="cover" class="image-thumb" />
+      <el-image :src="image.imageUrl" fit="cover" class="image-thumb" lazy />
       <el-icon class="image-remove" @click="removeImage(index)">
         <Delete />
       </el-icon>

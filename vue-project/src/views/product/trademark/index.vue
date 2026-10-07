@@ -139,6 +139,7 @@ onMounted(fetchBrandList)
             :src="scope.row.logoUrl"
             class="brand-logo-img"
             fit="cover"
+            lazy
           />
           <div v-else class="logo-placeholder">暂无LOGO</div>
         </template>

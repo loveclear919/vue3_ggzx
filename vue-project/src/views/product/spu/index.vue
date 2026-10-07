@@ -209,6 +209,7 @@ const handleDelete = async (row: SpuInfo) => {
                   :src="scope.row.imageList[0].imageUrl"
                   class="spu-image"
                   fit="cover"
+                  lazy
                 />
                 <span v-else class="no-image">无图</span>
               </template>

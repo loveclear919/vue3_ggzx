@@ -232,12 +232,14 @@ watch(
                   :src="(scope.row as SkuInfo).skuDefaultImg"
                   class="sku-image"
                   fit="cover"
+                  lazy
                 />
                 <el-image
                   v-else-if="spu?.imageList[0]"
                   :src="spu.imageList[0].imageUrl"
                   class="sku-image"
                   fit="cover"
+                  lazy
                 />
                 <span v-else class="no-dim">无图</span>
               </template>
