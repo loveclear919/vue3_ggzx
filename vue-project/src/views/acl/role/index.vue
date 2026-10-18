@@ -14,7 +14,7 @@ import { getPermissionList } from '@/api/acl/permission/index'
 import { useUserStore } from '@/stores/user'
 
 // 内置角色行对非 grant-super 操作者禁用编辑/分配权限（体验层；后端 403 仍是裁决）
-const hasGrantSuper = computed(() => useUserStore().hasCode('role:grant-super'))
+const hasGrantSuper = computed(() => useUserStore().hasPerm('role:grant-super'))
 const isBuiltinBlocked = (row: RoleRow) => row.builtin && !hasGrantSuper.value
 
 // 分页列表

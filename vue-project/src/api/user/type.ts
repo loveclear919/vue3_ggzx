@@ -6,7 +6,18 @@ export interface LoginRequest {
   password: string
 }
 
-// 用户信息 — 与后端 toUserDTO 返回结构对齐（codes 为 RBAC 聚合结果，登录/注册/getInfo 时后端合并）
+// 后端下发路由表节点（与 backend services/rbac.ts 的 MenuRouteNode 对齐）：
+// 授权菜单树的 DTO —— 前端动态注册路由与渲染菜单的单一数据源
+export interface MenuRouteNode {
+  path: string
+  title: string
+  icon: string
+  hidden: boolean
+  component: string // '' = 分组菜单
+  children?: MenuRouteNode[]
+}
+
+// 用户信息 — 与后端登录/getInfo 响应对齐（perms 与 routes 为 RBAC 聚合结果，后端合并下发）
 export interface UserInfo {
   userId: string
   username: string
@@ -14,7 +25,8 @@ export interface UserInfo {
   avatar: string
   desc: string
   roles: string[] // 角色 id 数组
-  codes: string[] // 权限 code 集合（菜单过滤 / v-permission / 守卫判权共用）
+  perms: string[] // 权限标识集合（v-permission / 守卫 /screen 判权共用）
+  routes: MenuRouteNode[] // 授权菜单路由树（动态注册 + 菜单渲染共用）
 }
 
 // 登录 / 注册返回数据

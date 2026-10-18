@@ -15,10 +15,8 @@ export async function listPermissions() {
 // 父级校验链
 async function validateParentFor(type: string, parentId: string | null, selfId?: string) {
   if (!parentId) {
-    if (type === 'button') {
-      throw AppError.badRequest('按钮必须挂载在菜单下，不能作为顶级节点')
-    }
-    return
+    // 根节点（parentId = null）是全树唯一的结构容器，业务节点一律挂父级下（含顶级菜单挂根节点）
+    throw AppError.badRequest('必须挂载在父级下')
   }
   if (!mongoose.isValidObjectId(parentId)) {
     throw AppError.badRequest('父级格式不合法')
@@ -52,13 +50,44 @@ async function validateParentFor(type: string, parentId: string | null, selfId?:
   }
 }
 
+// 路由元数据校验（create/update 共用）：返回清洗后的值
+function cleanRouteMeta(
+  type: string,
+  meta: { path?: unknown; component?: unknown; icon?: unknown; hidden?: unknown },
+): { path: string; component: string; icon: string; hidden: boolean } {
+  const path = typeof meta.path === 'string' ? meta.path.trim() : ''
+  const component = typeof meta.component === 'string' ? meta.component.trim() : ''
+  const icon = typeof meta.icon === 'string' ? meta.icon.trim() : ''
+  const hidden = meta.hidden === true
+
+  if (type === 'button' && (path || component || icon || hidden)) {
+    throw AppError.badRequest('按钮类型不需要路由/组件配置')
+  }
+  if (type === 'menu') {
+    if (!path) {
+      throw AppError.badRequest('菜单必须填写路由地址')
+    }
+    if (!/^\/[a-z0-9/_-]*$/.test(path)) {
+      throw AppError.badRequest('路由地址需以 / 开头，只能包含小写字母、数字、/ _ -')
+    }
+    if (component && !/^[a-z0-9_/-]*$/.test(component)) {
+      throw AppError.badRequest('组件路径只能包含小写字母、数字、_ / -')
+    }
+    if (icon && (icon.length > 32 || !/^[A-Za-z0-9_-]*$/.test(icon))) {
+      throw AppError.badRequest('图标名只能包含字母、数字、_ -')
+    }
+  }
+  return { path, component, icon, hidden }
+}
+
 // 新增
 export async function createPermission(
   parentId: string | null,
   name: string,
-  code: string,
+  perms: string,
   type: string,
   sortIndex?: number,
+  meta: { path?: unknown; component?: unknown; icon?: unknown; hidden?: unknown } = {},
 ) {
   // 校验权限名
   if (typeof name !== 'string') {
@@ -72,16 +101,18 @@ export async function createPermission(
   if (type !== 'menu' && type !== 'button') {
     throw AppError.badRequest('权限类型错误')
   }
-  // 校验权限值
-  if (typeof code !== 'string') {
-    throw AppError.badRequest('权限值格式错误')
+  // 校验权限标识：分组菜单可为空串；按钮必须有（它是按钮的全部）
+  if (typeof perms !== 'string') {
+    throw AppError.badRequest('权限标识格式错误')
   }
-  const cleanCode = code.trim()
-  if (!cleanCode) {
-    throw AppError.badRequest('权限值不能为空')
+  const cleanPerms = perms.trim()
+  if (!cleanPerms && type === 'button') {
+    throw AppError.badRequest('按钮必须填写权限标识')
   }
   // 校验上级（层级规则 + 存在性，与 update 共用）
   await validateParentFor(type, parentId || null)
+  // 校验路由元数据（menu 必填 path；按钮禁填）
+  const route = cleanRouteMeta(type, meta)
 
   // 排序号：显式传入（种子/重排）必须是非负整数；未传 → 同级最大 + 1（新节点默认排最后）
   let resolvedSortIndex = sortIndex
@@ -100,25 +131,33 @@ export async function createPermission(
     const permission = await Permission.create({
       parentId: parentId || null,
       name: cleanName,
-      code: cleanCode,
+      perms: cleanPerms,
       type,
+      path: route.path,
+      component: route.component,
+      icon: route.icon,
+      hidden: route.hidden,
       sortIndex: resolvedSortIndex,
     })
     return toPermissionDTO(permission)
   } catch (err) {
-    // 多分支分派：code 与 (parentId, sortIndex) 两种唯一索引冲突给不同文案
-    rethrowConflict(err, ['code', '权限标识 code 已存在'], ['sortIndex', '排序号冲突，请重试'])
+    // 多分支分派：perms 与 (parentId, sortIndex) 两种唯一索引冲突给不同文案
+    rethrowConflict(err, ['perms', '权限标识已存在'], ['sortIndex', '排序号冲突，请重试'])
   }
 }
 
-// 白名单更新：name / sortIndex / parentId —— code 是稳定身份（前端路由/按钮指令按它对账），创建后不可改
+// 白名单更新：name / perms / path / component / icon / hidden / sortIndex / parentId（若依式全字段可编辑——
+// perms 可改：改错直接改回来，契约失配是显性错误（按钮不显示/接口 403），由操作者负责）
 export async function updatePermission(id: string, body: Record<string, unknown>) {
-  // 根节点保护（rbac-design §4.5）：code '/' 是系统虚拟容器，不可修改
-  const existing = await Permission.findById(id).select('code type parentId').lean()
+  if (!mongoose.isValidObjectId(id)) {
+    throw AppError.notFound('权限不存在')
+  }
+  // 根节点保护（rbac-design §4.5）：parentId = null 是系统结构容器，不可修改
+  const existing = await Permission.findById(id).select('perms type parentId').lean()
   if (!existing) {
     throw AppError.notFound('权限不存在')
   }
-  if (existing.code === '/') {
+  if (existing.parentId === null) {
     throw AppError.forbidden('系统根节点不可修改')
   }
 
@@ -133,6 +172,44 @@ export async function updatePermission(id: string, body: Record<string, unknown>
       throw AppError.badRequest('权限名不能为空')
     }
     patch.name = cleanName
+  }
+  if (body.perms !== undefined) {
+    if (typeof body.perms !== 'string') {
+      throw AppError.badRequest('权限标识格式不合法')
+    }
+    const cleanPerms = body.perms.trim()
+    if (!cleanPerms && existing.type === 'button') {
+      throw AppError.badRequest('按钮必须填写权限标识')
+    }
+    patch.perms = cleanPerms
+  }
+  if (body.path !== undefined) {
+    if (typeof body.path !== 'string') {
+      throw AppError.badRequest('路由地址格式不合法')
+    }
+    const route = cleanRouteMeta(existing.type, { path: body.path })
+    patch.path = route.path
+  }
+  if (body.component !== undefined) {
+    if (typeof body.component !== 'string') {
+      throw AppError.badRequest('组件路径格式不合法')
+    }
+    patch.component = cleanRouteMeta(existing.type, { component: body.component }).component
+  }
+  if (body.icon !== undefined) {
+    if (typeof body.icon !== 'string') {
+      throw AppError.badRequest('图标名格式不合法')
+    }
+    patch.icon = cleanRouteMeta(existing.type, { icon: body.icon }).icon
+  }
+  if (body.hidden !== undefined) {
+    if (typeof body.hidden !== 'boolean') {
+      throw AppError.badRequest('隐藏标记格式不合法')
+    }
+    if (existing.type === 'button' && body.hidden) {
+      throw AppError.badRequest('按钮类型不需要路由/组件配置')
+    }
+    patch.hidden = body.hidden
   }
   if (body.sortIndex !== undefined) {
     if (
@@ -181,18 +258,21 @@ export async function updatePermission(id: string, body: Record<string, unknown>
     }
     return toPermissionDTO(permission)
   } catch (err) {
-    // 唯一索引只有 code 与 (parentId, sortIndex)，code 不在白名单 → 只会撞排序号
-    rethrowConflict(err, ['sortIndex', '排序号冲突，请重试'])
+    // 唯一索引只有 perms 与 (parentId, sortIndex)
+    rethrowConflict(err, ['perms', '权限标识已存在'], ['sortIndex', '排序号冲突，请重试'])
   }
 }
 
 export async function deletePermission(id: string) {
-  // 根节点保护：code '/' 是系统虚拟容器，不可删除
-  const target = await Permission.findById(id).select('code').lean()
+  if (!mongoose.isValidObjectId(id)) {
+    throw AppError.notFound('权限不存在')
+  }
+  // 根节点保护：parentId = null 是系统结构容器，不可删除
+  const target = await Permission.findById(id).select('parentId').lean()
   if (!target) {
     throw AppError.notFound('权限不存在')
   }
-  if (target.code === '/') {
+  if (target.parentId === null) {
     throw AppError.forbidden('系统根节点不可删除')
   }
   // 子级保护
@@ -214,6 +294,10 @@ export async function deletePermission(id: string) {
 // 临时值取「同层最大 + 1」——崩溃残留也是合法位置（排在末尾），刷新重试即修复；
 // 并发窗口由唯一索引兜底（11000 → 409，乐观写入）。若未来要求强一致，升级为事务版（需副本集）
 export async function swapPermissionSort(id: string, targetId: string) {
+  // 入参健壮性：畸形 id 直接 404（findById 对非法 ObjectId 会抛 CastError → 500，见评审记录）
+  if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(targetId)) {
+    throw AppError.notFound('权限不存在')
+  }
   const a = await Permission.findById(id)
   const b = await Permission.findById(targetId)
   if (!a || !b) {

@@ -155,30 +155,39 @@ test('登录：手机号不存在 → 401（防枚举同文案）', async () => 
   expectMessage(res, '手机号或密码错误')
 })
 
-test('RBAC：登录响应含 codes 数组且无死字段 buttons/routes', async () => {
+test('RBAC：登录响应含 perms 与 routes（树形），无死字段 buttons/codes', async () => {
   const res = await req('POST', '/auth/login', {
     body: { phone: bootstrapPhone, password: '123456' },
     auth: false,
   })
   expectStatus(res, 200)
   const user = res.json?.data?.user as Record<string, unknown>
-  expect(Array.isArray(user?.codes), '登录响应 user.codes 应为数组')
-  expect(!('buttons' in user) && !('routes' in user), '登录响应不应再含死字段 buttons/routes')
+  expect(Array.isArray(user?.perms), '登录响应 user.perms 应为数组')
+  expect(Array.isArray(user?.routes), '登录响应 user.routes 应为数组')
+  expect(!('buttons' in user) && !('codes' in user), '登录响应不应再含死字段 buttons/codes')
+  const first = (user?.routes as Array<Record<string, unknown>> | undefined)?.[0]
+  if (first) {
+    for (const k of ['path', 'title', 'icon', 'hidden', 'component']) {
+      expect(k in first, `routes 节点应含 ${k}`)
+    }
+  }
 })
 
-test('RBAC：/user/info 响应含 codes 数组', async () => {
+test('RBAC：/user/info 响应含 perms 与 routes', async () => {
   const res = await req('GET', '/user/info')
   expectStatus(res, 200)
-  expect(Array.isArray(res.json?.data?.codes), '/user/info 响应 codes 应为数组')
+  expect(Array.isArray(res.json?.data?.perms), '/user/info 响应 perms 应为数组')
+  expect(Array.isArray(res.json?.data?.routes), '/user/info 响应 routes 应为数组')
 })
 
-test('RBAC：注册响应含 codes 数组', async () => {
+test('RBAC：注册响应含 perms 与 routes', async () => {
   const res = await req('POST', '/auth/register', {
     body: { phone: `1991233${String(Date.now()).slice(-4)}`, password: '123456' },
     auth: false,
   })
   expectStatus(res, 200)
-  expect(Array.isArray(res.json?.data?.user?.codes), '注册响应 user.codes 应为数组')
+  expect(Array.isArray(res.json?.data?.user?.perms), '注册响应 user.perms 应为数组')
+  expect(Array.isArray(res.json?.data?.user?.routes), '注册响应 user.routes 应为数组')
 })
 
 test('个人资料：avatar 更新 → 200', async () => {
@@ -1407,10 +1416,12 @@ test('角色管理：更新不存在 → 404', async () => {
 })
 
 // ==================== 权限管理 ====================
-// 测试数据 code 统一 boundary_ 前缀（cleanup 按前缀直连库清扫）；权限树无种子，用例自建自清
+// 测试数据 perms 统一 boundary_ 前缀（cleanup 按前缀直连库清扫）；用例自建自清
+// v2 契约：根节点 = parentId null（全树唯一结构容器），业务节点一律挂父级下；菜单必填 path
 let permMenuId = ''
 let permBtnId = ''
 let permChildMenuId = ''
+let rootId = ''
 let topSortIndex = -1
 
 test('权限管理：列表 → 200 全量平铺数组', async () => {
@@ -1419,21 +1430,38 @@ test('权限管理：列表 → 200 全量平铺数组', async () => {
   expect(Array.isArray(res.json?.data), '应返回平铺数组')
 })
 
-test('权限管理：创建顶级菜单 → 200（parentId 缺省 null、sortIndex 自动同级最大 + 1）', async () => {
-  // 相对断言：种子根节点「全部数据」占着 sortIndex 0，绝对值为 0/1 的断言会挂
-  const before = await req('GET', '/permission')
-  const topMax = Math.max(
-    -1,
-    ...(before.json?.data as Array<{ parentId: unknown; sortIndex: number }>)
-      .filter((n) => n.parentId === null)
-      .map((n) => n.sortIndex),
-  )
+test('权限管理：菜单缺省父级 → 400（必须挂载在父级下）', async () => {
   const res = await req('POST', '/permission', {
-    body: { name: '边界测试顶级菜单', code: `boundary_perm_${suffix}`, type: 'menu' },
+    body: {
+      name: '边界测试无父级',
+      perms: `boundary_noparent_${suffix}`,
+      path: `/boundary_noparent_${suffix}`,
+      type: 'menu',
+    },
+  })
+  expectStatus(res, 400)
+  expectMessage(res, '必须挂载在父级下')
+})
+
+test('权限管理：创建挂根节点的菜单 → 200（sortIndex 自动同级最大 + 1）', async () => {
+  // 相对断言：根节点「全部数据」占着 (null, 0)，绝对值断言会挂
+  const before = await req('GET', '/permission')
+  const list = before.json?.data as Array<{ permissionId: string; parentId: unknown; sortIndex: number }>
+  rootId = list.find((n) => n.parentId === null)?.permissionId ?? ''
+  expect(!!rootId, '应找到根节点')
+  const topMax = Math.max(-1, ...list.filter((n) => n.parentId === rootId).map((n) => n.sortIndex))
+  const res = await req('POST', '/permission', {
+    body: {
+      name: '边界测试顶级菜单',
+      perms: `boundary_perm_${suffix}`,
+      path: `/boundary_perm_${suffix}`,
+      type: 'menu',
+      parentId: rootId,
+    },
   })
   expectStatus(res, 200)
   const data = res.json?.data as { permissionId: string; parentId: unknown; sortIndex: number }
-  expect(data.parentId === null, '顶级菜单 parentId 应为 null')
+  expect(data.parentId === rootId, '菜单应挂在根节点下')
   expect(data.sortIndex === topMax + 1, `sortIndex 应为同级最大 + 1（${topMax + 1}）`)
   permMenuId = data.permissionId
   topSortIndex = data.sortIndex
@@ -1441,7 +1469,13 @@ test('权限管理：创建顶级菜单 → 200（parentId 缺省 null、sortInd
 
 test('权限管理：创建第二个顶级菜单 → sortIndex 继续 max+1', async () => {
   const res = await req('POST', '/permission', {
-    body: { name: '边界测试顶级菜单二', code: `boundary_perm2_${suffix}`, type: 'menu' },
+    body: {
+      name: '边界测试顶级菜单二',
+      perms: `boundary_perm2_${suffix}`,
+      path: `/boundary_perm2_${suffix}`,
+      type: 'menu',
+      parentId: rootId,
+    },
   })
   expectStatus(res, 200)
   const data = res.json?.data as { sortIndex: number }
@@ -1449,27 +1483,42 @@ test('权限管理：创建第二个顶级菜单 → sortIndex 继续 max+1', as
   topSortIndex = data.sortIndex
 })
 
-test('权限管理：code 重名 → 409', async () => {
+test('权限管理：perms 重名 → 409', async () => {
   const res = await req('POST', '/permission', {
-    body: { name: '边界测试重名', code: `boundary_perm_${suffix}`, type: 'menu' },
+    body: {
+      name: '边界测试重名',
+      perms: `boundary_perm_${suffix}`,
+      path: `/boundary_dup_${suffix}`,
+      type: 'menu',
+      parentId: rootId,
+    },
   })
   expectStatus(res, 409)
-  expectMessage(res, 'code 已存在')
+  expectMessage(res, '权限标识已存在')
 })
 
-test('权限管理：button 挂顶级 → 400（层级规则）', async () => {
+test('权限管理：button 挂顶级 → 400（必须挂载在父级下）', async () => {
   const res = await req('POST', '/permission', {
-    body: { name: '边界测试按钮', code: `boundary_btn_${suffix}`, type: 'button' },
+    body: { name: '边界测试按钮', perms: `boundary_btn_${suffix}`, type: 'button' },
   })
   expectStatus(res, 400)
-  expectMessage(res, '按钮必须挂载在菜单下')
+  expectMessage(res, '必须挂载在父级下')
+})
+
+test('权限管理：按钮缺 perms → 400', async () => {
+  const res = await req('POST', '/permission', {
+    body: { name: '边界测试无标识按钮', perms: '', type: 'button', parentId: permMenuId },
+  })
+  expectStatus(res, 400)
+  expectMessage(res, '按钮必须填写权限标识')
 })
 
 test('权限管理：父级格式非法 → 400', async () => {
   const res = await req('POST', '/permission', {
     body: {
       name: '边界测试坏父级',
-      code: `boundary_bad_${suffix}`,
+      perms: `boundary_bad_${suffix}`,
+      path: `/boundary_bad_${suffix}`,
       type: 'menu',
       parentId: 'not-an-id',
     },
@@ -1482,7 +1531,8 @@ test('权限管理：父级不存在 → 400', async () => {
   const res = await req('POST', '/permission', {
     body: {
       name: '边界测试孤儿',
-      code: `boundary_orphan_${suffix}`,
+      perms: `boundary_orphan_${suffix}`,
+      path: `/boundary_orphan_${suffix}`,
       type: 'menu',
       parentId: '000000000000000000000000',
     },
@@ -1495,7 +1545,8 @@ test('权限管理：创建子菜单（menu 挂 menu）→ 200', async () => {
   const res = await req('POST', '/permission', {
     body: {
       name: '边界测试子菜单',
-      code: `boundary_child_${suffix}`,
+      perms: `boundary_child_${suffix}`,
+      path: `/boundary_child_${suffix}`,
       type: 'menu',
       parentId: permMenuId,
     },
@@ -1508,7 +1559,7 @@ test('权限管理：创建按钮（挂菜单下）→ 200', async () => {
   const res = await req('POST', '/permission', {
     body: {
       name: '边界测试按钮',
-      code: `boundary_btn_${suffix}`,
+      perms: `boundary_btn_${suffix}`,
       type: 'button',
       parentId: permMenuId,
     },
@@ -1521,7 +1572,7 @@ test('权限管理：button 挂 button → 400（层级规则）', async () => {
   const res = await req('POST', '/permission', {
     body: {
       name: '边界测试嵌套按钮',
-      code: `boundary_btn2_${suffix}`,
+      perms: `boundary_btn2_${suffix}`,
       type: 'button',
       parentId: permBtnId,
     },
@@ -1533,7 +1584,13 @@ test('权限管理：button 挂 button → 400（层级规则）', async () => {
 test('权限管理：按钮跨父移动 → 200（sortIndex 自动重排到目标父级末尾）', async () => {
   // 目标父级建一个空菜单：按钮 sortIndex 0 移过去若沿用旧序号会撞唯一索引 —— 应自动重排
   const newMenu = await req('POST', '/permission', {
-    body: { name: '边界测试新菜单', code: `boundary_move_${suffix}`, type: 'menu' },
+    body: {
+      name: '边界测试新菜单',
+      perms: `boundary_move_${suffix}`,
+      path: `/boundary_move_${suffix}`,
+      type: 'menu',
+      parentId: rootId,
+    },
   })
   expectStatus(newMenu, 200)
   const newMenuId = (newMenu.json?.data as { permissionId: string }).permissionId
@@ -1549,7 +1606,13 @@ test('权限管理：按钮跨父移动 → 200（sortIndex 自动重排到目�
 
 test('权限管理：同层交换排序 → 200（sortIndex 互换）', async () => {
   const menu = await req('POST', '/permission', {
-    body: { name: '边界测试排序菜单', code: `boundary_swap_${suffix}`, type: 'menu' },
+    body: {
+      name: '边界测试排序菜单',
+      perms: `boundary_swap_${suffix}`,
+      path: `/boundary_swap_${suffix}`,
+      type: 'menu',
+      parentId: rootId,
+    },
   })
   expectStatus(menu, 200)
   const menuId = (menu.json?.data as { permissionId: string }).permissionId
@@ -1557,7 +1620,7 @@ test('权限管理：同层交换排序 → 200（sortIndex 互换）', async ()
   const btn1 = await req('POST', '/permission', {
     body: {
       name: '边界测试排序按钮一',
-      code: `boundary_swap1_${suffix}`,
+      perms: `boundary_swap1_${suffix}`,
       type: 'button',
       parentId: menuId,
     },
@@ -1565,7 +1628,7 @@ test('权限管理：同层交换排序 → 200（sortIndex 互换）', async ()
   const btn2 = await req('POST', '/permission', {
     body: {
       name: '边界测试排序按钮二',
-      code: `boundary_swap2_${suffix}`,
+      perms: `boundary_swap2_${suffix}`,
       type: 'button',
       parentId: menuId,
     },
@@ -1583,6 +1646,12 @@ test('权限管理：同层交换排序 → 200（sortIndex 互换）', async ()
   expect(s1 === 1 && s2 === 0, `应互换为 (1, 0)，实际 (${s1}, ${s2})`)
 })
 
+test('权限管理：交换非法 targetId → 404（畸形 id 不再 500）', async () => {
+  const res = await req('PATCH', `/permission/${permMenuId}/swap`, { body: { targetId: 'not-an-id' } })
+  expectStatus(res, 404)
+  expectMessage(res, '权限不存在')
+})
+
 test('权限管理：交换不同层节点 → 400', async () => {
   // permMenuId（顶级）与 permChildMenuId（其子级）不同层
   const res = await req('PATCH', `/permission/${permMenuId}/swap`, {
@@ -1592,16 +1661,24 @@ test('权限管理：交换不同层节点 → 400', async () => {
   expectMessage(res, '只能交换同层节点')
 })
 
-test('权限管理：更新 name → 200；code 被忽略', async () => {
+test('权限管理：更新 perms → 200（若依式全字段可编辑，纠错直接改）', async () => {
   const res = await req('PATCH', `/permission/${permMenuId}`, {
-    body: { name: '边界测试改名', code: 'hacked_code' },
+    body: { name: '边界测试改名', perms: `boundary_perm_edited_${suffix}` },
   })
   expectStatus(res, 200)
-  const data = res.json?.data as { name: string; code: string }
+  const data = res.json?.data as { name: string; perms: string }
   expect(
-    data.name === '边界测试改名' && data.code === `boundary_perm_${suffix}`,
-    'name 应更新、code 应被忽略',
+    data.name === '边界测试改名' && data.perms === `boundary_perm_edited_${suffix}`,
+    'name 与 perms 都应更新',
   )
+})
+
+test('权限管理：更新 perms 撞已有值 → 409', async () => {
+  const res = await req('PATCH', `/permission/${permMenuId}`, {
+    body: { perms: `boundary_perm2_${suffix}` },
+  })
+  expectStatus(res, 409)
+  expectMessage(res, '权限标识已存在')
 })
 
 test('权限管理：parentId 设成自己 → 400（环校验）', async () => {
@@ -1628,7 +1705,13 @@ test('权限管理：删除有子级的菜单 → 409', async () => {
 test('权限管理：删除被角色引用 → 409；撤销引用后 → 200', async () => {
   // 造一个专用权限节点 + 一个测试角色，分配后验证引用保护
   const perm = await req('POST', '/permission', {
-    body: { name: '边界测试被引用', code: `boundary_ref_${suffix}`, type: 'menu' },
+    body: {
+      name: '边界测试被引用',
+      perms: `boundary_ref_${suffix}`,
+      path: `/boundary_ref_${suffix}`,
+      type: 'menu',
+      parentId: rootId,
+    },
   })
   expectStatus(perm, 200)
   const permRefId = (perm.json?.data as { permissionId: string }).permissionId
@@ -1670,15 +1753,29 @@ test('RBAC：超管登录成功', async () => {
   expectStatus(res, 200)
   superToken = (res.json?.data as { token?: string })?.token ?? ''
   expect(!!superToken, '应拿到超管 token')
-  // 全量基线抽查：商品页按钮 code 已铺开（seed:permissions 第二阶段）
-  const codes = (res.json?.data?.user as { codes?: string[] })?.codes ?? []
-  for (const c of ['spu:create', 'sku:generate', 'brand:delete', 'attr:update']) {
-    expect(codes.includes(c), `超管 codes 应含 ${c}`)
+  // 全量基线抽查：商品页按钮 perms 已铺开（seed:permissions 第二阶段）
+  const perms = (res.json?.data?.user as { perms?: string[] })?.perms ?? []
+  for (const p of ['spu:create', 'sku:generate', 'brand:delete', 'attr:update']) {
+    expect(perms.includes(p), `超管 perms 应含 ${p}`)
   }
+  // 路由树基线：顶层含 /acl、/product；静态页 /home、/screen 不进路由表；
+  // SKU 与 SPU 平级挂 /product（权限树 = 路由树，对齐若依）且 hidden
+  const routes = (res.json?.data?.user as {
+    routes?: Array<Record<string, unknown> & { children?: Array<Record<string, unknown>> }>
+  })?.routes ?? []
+  const topPaths = routes.map((r) => r.path)
+  expect(topPaths.includes('/acl') && topPaths.includes('/product'), '超管 routes 应含 /acl 与 /product')
+  expect(!topPaths.includes('/home') && !topPaths.includes('/screen'), '静态页不应进路由表')
+  const product = routes.find((r) => r.path === '/product')
+  const productChildren = (product?.children ?? []) as Array<Record<string, unknown>>
+  expect(
+    productChildren.some((c) => c.path === '/product/spu/sku' && c.hidden === true),
+    'sku 应与 spu 平级挂 /product 且 hidden',
+  )
 })
 
 test('RBAC：无权限用户访问管理接口 → 403', async () => {
-  // 新注册 = 默认 user 角色（仅 /home /screen）
+  // 新注册 = 默认 user 角色（空权限 —— 静态页人人可见，放开判权定案）
   const reg = await req('POST', '/auth/register', {
     body: { phone: `1991238${String(Date.now()).slice(-4)}`, password: '123456' },
     auth: false,
@@ -1737,8 +1834,8 @@ test('RBAC：改/删内置角色 → 403；超管可改 remark 但不可改名',
 
 test('RBAC：内置角色不可移除 grant-super；普通角色不可被授予 grant-super', async () => {
   const permRes = await req('GET', '/permission')
-  const perms = (permRes.json?.data as Array<{ permissionId: string; code: string }>) ?? []
-  const grantId = perms.find((p) => p.code === 'role:grant-super')?.permissionId ?? ''
+  const perms = (permRes.json?.data as Array<{ permissionId: string; perms: string }>) ?? []
+  const grantId = perms.find((p) => p.perms === 'role:grant-super')?.permissionId ?? ''
   expect(!!grantId, '应找到 grant-super 权限')
 
   // 超管把 super_admin 的 permissions 改成「不含 grant-super 的全量」→ 403（防自我锁死）
@@ -1780,7 +1877,7 @@ test('RBAC：最后一名超管不可被改角色（含自我降级）', async (
   await mongoose.connect(process.env.MONGODB_URI!)
   const grant = await mongoose.connection
     .db!.collection('permissions')
-    .findOne({ code: 'role:grant-super' })
+    .findOne({ perms: 'role:grant-super' })
   const grantRoleIds = (
     await mongoose.connection.db!.collection('roles').find({ permissions: grant?._id }).toArray()
   ).map((r) => r._id)
@@ -1817,34 +1914,34 @@ test('RBAC：最后一名超管不可被改角色（含自我降级）', async (
 
 test('RBAC：根节点不可改/删', async () => {
   const permRes = await req('GET', '/permission')
-  const perms = (permRes.json?.data as Array<{ permissionId: string; code: string }>) ?? []
-  const rootId = perms.find((p) => p.code === '/')?.permissionId ?? ''
-  expect(!!rootId, '应找到根节点')
-  expectStatus(await req('PATCH', `/permission/${rootId}`, { body: { name: '改名失败' } }), 403)
-  expectStatus(await req('DELETE', `/permission/${rootId}`), 403)
+  const perms = (permRes.json?.data as Array<{ permissionId: string; parentId: unknown }>) ?? []
+  const rootPermId = perms.find((p) => p.parentId === null)?.permissionId ?? ''
+  expect(!!rootPermId, '应找到根节点')
+  expectStatus(await req('PATCH', `/permission/${rootPermId}`, { body: { name: '改名失败' } }), 403)
+  expectStatus(await req('DELETE', `/permission/${rootPermId}`), 403)
 })
 
 test('RBAC：updateRole 传根 id → 静默剔除后 200', async () => {
   const permRes = await req('GET', '/permission')
-  const perms = (permRes.json?.data as Array<{ permissionId: string; code: string }>) ?? []
-  const rootId = perms.find((p) => p.code === '/')?.permissionId ?? ''
-  const homeId = perms.find((p) => p.code === '/home')?.permissionId ?? ''
-  expect(!!rootId && !!homeId, '应找到根节点与 /home')
+  const perms = (permRes.json?.data as Array<{ permissionId: string; parentId: unknown; path: string }>) ?? []
+  const rootPermId = perms.find((p) => p.parentId === null)?.permissionId ?? ''
+  const homeId = perms.find((p) => p.path === '/home')?.permissionId ?? ''
+  expect(!!rootPermId && !!homeId, '应找到根节点与 /home')
 
   const created = await req('POST', '/role', { body: { roleName: `brole_root_${suffix}` } })
   expectStatus(created, 200)
   const roleId = (created.json?.data as { roleId?: string })?.roleId ?? ''
-  const res = await req('PATCH', `/role/${roleId}`, { body: { permissions: [rootId, homeId] } })
+  const res = await req('PATCH', `/role/${roleId}`, { body: { permissions: [rootPermId, homeId] } })
   expectStatus(res, 200)
   const saved = (res.json?.data as { permissions?: string[] })?.permissions ?? []
-  expect(!saved.includes(rootId), '根 id 应被静默剔除')
+  expect(!saved.includes(rootPermId), '根 id 应被静默剔除')
   expect(saved.includes(homeId), '/home 应正常入库')
 })
 
-test('RBAC：祖先补全 —— 只勾按钮的角色，codes 必含菜单链', async () => {
+test('RBAC：祖先补全 —— 只勾按钮的角色，perms 必含菜单链且路由树带祖先', async () => {
   const permRes = await req('GET', '/permission')
-  const perms = (permRes.json?.data as Array<{ permissionId: string; code: string }>) ?? []
-  const btnId = perms.find((p) => p.code === 'user:delete')?.permissionId ?? ''
+  const perms = (permRes.json?.data as Array<{ permissionId: string; perms: string }>) ?? []
+  const btnId = perms.find((p) => p.perms === 'user:delete')?.permissionId ?? ''
   expect(!!btnId, '应找到 user:delete 按钮')
 
   // 角色只勾按钮（不勾菜单）——存储侧半选父级不入库的既定契约
@@ -1853,7 +1950,7 @@ test('RBAC：祖先补全 —— 只勾按钮的角色，codes 必含菜单链',
   const roleId = (createdRole.json?.data as { roleId?: string })?.roleId ?? ''
   expectStatus(await req('PATCH', `/role/${roleId}`, { body: { permissions: [btnId] } }), 200)
 
-  // 用户挂该角色后登录：codes 应由聚合期祖先补全出菜单链，且不含根节点
+  // 用户挂该角色后登录：perms 应由聚合期祖先补全出菜单标识，路由树带祖先分组
   const phone = `1991236${String(Date.now()).slice(-4)}`
   expectStatus(
     await req('POST', '/user', { body: { phone, password: '123456', roles: [roleId] } }),
@@ -1864,11 +1961,19 @@ test('RBAC：祖先补全 —— 只勾按钮的角色，codes 必含菜单链',
     auth: false,
   })
   expectStatus(loginRes, 200)
-  const codes = (loginRes.json?.data?.user as { codes?: string[] })?.codes ?? []
-  expect(codes.includes('user:delete'), 'codes 应含按钮 code')
-  expect(codes.includes('/acl/users'), 'codes 应含祖先菜单 /acl/users')
-  expect(codes.includes('/acl'), 'codes 应含祖先菜单 /acl')
-  expect(!codes.includes('/'), 'codes 不应含根节点 /')
+  const userPerms = (loginRes.json?.data?.user as { perms?: string[] })?.perms ?? []
+  expect(userPerms.includes('user:delete'), 'perms 应含按钮标识')
+  expect(userPerms.includes('user:list'), 'perms 应含祖先菜单标识 user:list')
+  const routes = (loginRes.json?.data?.user as {
+    routes?: Array<{ path: string; children?: Array<{ path: string; component?: string }> }>
+  })?.routes ?? []
+  const acl = routes.find((r) => r.path === '/acl')
+  expect(!!acl, 'routes 应含 /acl 分组（祖先补全）')
+  expect(
+    acl?.children?.some((c) => c.path === '/acl/users' && c.component === 'acl/user/index') === true,
+    'routes 应含 /acl/users 叶子与组件路径',
+  )
+  expect(routes.every((r) => r.path !== '/home' && r.path !== '/screen'), '静态页不应进路由表')
 })
 
 test('RBAC：权限树成环时聚合不死循环（visited 防环）', async () => {
@@ -1881,7 +1986,7 @@ test('RBAC：权限树成环时聚合不死循环（visited 防环）', async ()
     (await col.find({ parentId: null }).sort({ sortIndex: -1 }).limit(1).next())?.sortIndex ?? -1
   const a = await col.insertOne({
     name: '边界环节点A',
-    code: `boundary_cycle_a_${suffix}`,
+    perms: `boundary_cycle_a_${suffix}`,
     type: 'menu',
     parentId: null,
     sortIndex: (topMax as number) + 1,
@@ -1890,7 +1995,7 @@ test('RBAC：权限树成环时聚合不死循环（visited 防环）', async ()
   })
   const b = await col.insertOne({
     name: '边界环节点B',
-    code: `boundary_cycle_b_${suffix}`,
+    perms: `boundary_cycle_b_${suffix}`,
     type: 'menu',
     parentId: a.insertedId,
     sortIndex: 0,
@@ -1917,9 +2022,9 @@ test('RBAC：权限树成环时聚合不死循环（visited 防环）', async ()
     auth: false,
   })
   expectStatus(loginRes, 200)
-  const codes = (loginRes.json?.data?.user as { codes?: string[] })?.codes ?? []
-  expect(codes.includes(`boundary_cycle_a_${suffix}`), '应含环节点 A 的 code')
-  expect(codes.includes(`boundary_cycle_b_${suffix}`), '应含环节点 B 的 code（环中断前已收集）')
+  const cyclePerms = (loginRes.json?.data?.user as { perms?: string[] })?.perms ?? []
+  expect(cyclePerms.includes(`boundary_cycle_a_${suffix}`), '应含环节点 A 的 perms')
+  expect(cyclePerms.includes(`boundary_cycle_b_${suffix}`), '应含环节点 B 的 perms（环中断前已收集）')
 })
 
 // ==================== 数据大屏（dashboard-design §4.3，+4 例） ====================
@@ -2063,7 +2168,7 @@ test('大屏：数值与直连库一致 + 状态计数三不变式', async () =>
   )
 })
 
-test('大屏：无 /screen 权限的角色 → 403', async () => {
+test('大屏：无任何权限的角色 → 200（静态页放开判权，人人可见）', async () => {
   // 角色名 ≤ 20 字符（模型 maxlength）：brole_scr_ + suffix ≈ 18
   const created = await req('POST', '/role', { body: { roleName: `brole_scr_${suffix}` } })
   expectStatus(created, 200)
@@ -2079,7 +2184,7 @@ test('大屏：无 /screen 权限的角色 → 403', async () => {
   })
   expectStatus(loginRes, 200)
   const token = (loginRes.json?.data as { token?: string })?.token ?? ''
-  expectStatus(await req('GET', '/dashboard/stats', { token }), 403)
+  expectStatus(await req('GET', '/dashboard/stats', { token }), 200)
 })
 
 test('大屏：bucketPrice 分档边界（下闭上开语义）', async () => {
@@ -2157,7 +2262,7 @@ async function cleanup() {
   // 测试角色：brole_ 名前缀（删除接口未开放，直连库清；先清用户再清角色，避免引用残留）
   await mongoose.connection.db!.collection('roles').deleteMany({ roleName: /^brole_/ })
   // 测试权限：code 前缀 boundary_（用例自建树，直连库清最省事）
-  await mongoose.connection.db!.collection('permissions').deleteMany({ code: /^boundary/ })
+  await mongoose.connection.db!.collection('permissions').deleteMany({ perms: /^boundary/ })
   await mongoose.disconnect()
   // 上传的测试图片：按 URL 末段定位文件删除（尽力而为，文件不在也不该让清理失败）
   for (const url of uploadedFiles) {

@@ -7,7 +7,14 @@ export type ThemeMode = 'light' | 'dark' | 'auto'
 
 export const useSettingStore = defineStore('setting', () => {
   const fold = ref(false)
+  // 用户是否手动点过折叠开关：手动选择优先，视口自动折叠/恢复不得覆盖（见 layout 的 matchMedia 逻辑）
+  const foldManual = ref(false)
   const refresh = ref(false)
+
+  function toggleFold() {
+    fold.value = !fold.value
+    foldManual.value = true
+  }
 
   // ---- 主题 ----
   // index.html 的内联脚本已按同一份 localStorage 值防过闪烁，此处只做状态接管与后续切换
@@ -55,5 +62,5 @@ export const useSettingStore = defineStore('setting', () => {
       ElMessage.warning('浏览器拒绝全屏操作')
     }
   }
-  return { fold, refresh, refreshPage, fullScreen, theme, setTheme }
+  return { fold, foldManual, toggleFold, refresh, refreshPage, fullScreen, theme, setTheme }
 })

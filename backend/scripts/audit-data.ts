@@ -13,8 +13,9 @@ const perms = await db.collection('permissions').find().toArray()
 
 const roleIds = new Set(roles.map((r) => String(r._id)))
 const permIds = new Set(perms.map((p) => String(p._id)))
-const rootPerm = perms.find((p) => p.code === '/')
-const grantSuper = perms.find((p) => p.code === 'role:grant-super')
+// v2 结构键：根节点 = parentId null（全树唯一）；grant-super 按 perms 定位
+const rootPerm = perms.find((p) => p.parentId === null)
+const grantSuper = perms.find((p) => p.perms === 'role:grant-super')
 
 let issues = 0
 const report = (label: string, items: string[]) => {
@@ -86,18 +87,21 @@ console.log(
 // ③ 权限树：环 + 可达性 + 唯一性
 console.log('【权限树】')
 const byId = new Map(perms.map((p) => [String(p._id), p]))
-const byCode = new Map(perms.map((p) => [p.code, p]))
+// 审计输出标签：优先 perms，空 perms（根/分组）用 path，再退化到 name
+const label = (p: Record<string, unknown>) => String(p.perms || p.path || p.name || p._id)
 report(
-  'code 重复',
+  '根节点数 ≠ 1（parentId = null 应为全树唯一）',
+  perms.filter((p) => p.parentId === null).length === 1 ? [] : ['根节点数异常'],
+)
+report(
+  'perms 重复（空串除外 —— 根/分组合法）',
   perms
-    .filter((p, i) => perms.findIndex((x) => x.code === p.code) !== i)
-    .map((p) => String(p.code)),
+    .filter((p) => p.perms && perms.filter((x) => x.perms === p.perms).length > 1)
+    .map(label),
 )
 report(
   'parentId 指向自己',
-  perms
-    .filter((p) => p.parentId && String(p.parentId) === String(p._id))
-    .map((p) => String(p.code)),
+  perms.filter((p) => p.parentId && String(p.parentId) === String(p._id)).map(label),
 )
 const cyclic: string[] = []
 for (const p of perms) {
@@ -106,7 +110,7 @@ for (const p of perms) {
   while (cur) {
     const key = String(cur)
     if (seen.has(key)) {
-      cyclic.push(String(p.code))
+      cyclic.push(label(p))
       break
     }
     seen.add(key)
@@ -121,7 +125,7 @@ for (const p of perms) {
   children.set(k, [...(children.get(k) ?? []), p._id])
 }
 const reachable = new Set<string>()
-const queue: unknown[] = [byCode.get('/')?._id].filter(Boolean)
+const queue: unknown[] = [rootPerm?._id].filter(Boolean)
 while (queue.length) {
   const cur = String(queue.pop()!)
   if (reachable.has(cur)) continue
@@ -130,20 +134,20 @@ while (queue.length) {
 }
 report(
   '从根不可达（前端组树会消失）',
-  perms.filter((p) => !reachable.has(String(p._id))).map((p) => String(p.code)),
+  perms.filter((p) => !reachable.has(String(p._id))).map(label),
 )
 // 同父级 sortIndex 冲突（复合唯一索引在库层兜底，这里是双检）
 const seen = new Set<string>()
 const sortDup: string[] = []
 for (const p of perms) {
   const key = `${String(p.parentId ?? 'null')}:${p.sortIndex ?? 0}`
-  if (seen.has(key)) sortDup.push(String(p.code))
+  if (seen.has(key)) sortDup.push(label(p))
   seen.add(key)
 }
 report('同父级 sortIndex 冲突', sortDup)
 report(
   '缺 parentId 键',
-  perms.filter((p) => !('parentId' in p)).map((p) => String(p.code)),
+  perms.filter((p) => !('parentId' in p)).map(label),
 )
 
 // ④ 其他集合行数

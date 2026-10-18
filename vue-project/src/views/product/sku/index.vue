@@ -339,6 +339,7 @@ watch(
   width: 40px;
   height: 40px;
   display: block;
+  border-radius: 4px;
 }
 
 // 分页器间距由父级控制（class 透传到 AppPagination 根元素）

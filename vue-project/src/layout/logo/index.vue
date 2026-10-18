@@ -11,7 +11,7 @@ const settingStore = useSettingStore()
         fill="currentColor"
       ></path>
     </svg>
-    <p class="logo-text">一条有用的大肥鱼</p>
+    <p class="logo-text">至臻电商管理平台</p>
   </div>
 </template>
 

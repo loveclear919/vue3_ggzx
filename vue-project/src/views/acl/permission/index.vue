@@ -117,8 +117,8 @@ onMounted(fetchPermission)
         </div>
       </template>
       <el-table :data="root" row-key="id" border v-loading="loading">
-        <el-table-column prop="name" label="名称" min-width="180" />
-        <el-table-column prop="code" label="权限值" min-width="180" />
+        <el-table-column prop="name" label="名称" min-width="160" />
+        <el-table-column prop="perms" label="权限标识" min-width="150" show-overflow-tooltip />
         <el-table-column label="类型" width="80" align="center">
           <template #default="scope">
             <el-tag

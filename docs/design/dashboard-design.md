@@ -12,7 +12,7 @@
 
 | 项 | 现状 |
 |---|---|
-| 页面 | `views/screen/index.vue`；路由 `/screen` 已有 `meta.code`，RBAC 内（seed 的 user 角色含 `/screen`） |
+| 页面 | `views/screen/index.vue`；路由 `/screen` 顶级独立路由（constantRoutes）；**静态页放开判权（2026-10-18 定案）：人人可见，无权限门**（守卫无检查、首页入口卡无 v-permission、后端接口仅 auth） |
 | 数据 | 实测：SPU 13 / SKU 100 / 在架 47 / 下架 53 / 未定价 15 / 品牌 21（有 SPU 的仅 9） / 三级分类 12 / 库存总价值约 ¥2057 万 |
 | 分类接口 | `GET /category` 是**逐级下钻**接口（无参数返回一级，?parentId= 返回子级）——不能直接给大屏组树 |
 | 树工具 | 前端 `utils/listToTree.ts`（平铺 → 树，含孤儿/环防御）——**当前大屏已无消费方**（旭日图面板按判据移除） |
@@ -77,7 +77,7 @@
 
 ### 4.1 聚合接口：`GET /api/dashboard/stats`
 
-- 路由 `routes/dashboard.ts`：`auth` + `requirePermission('/screen')`（普通用户可见大屏）
+- 路由 `routes/dashboard.ts`：仅 `auth`（**放开判权定案**：静态页人人可见，登录即可访问；原 `requirePermission('/screen')` 已移除）
 - 服务 `services/dashboard.ts`：单请求内 `Promise.all` 并行全量查询，**单次遍历**内完成 KPI 累积 + 分带计数 + 待办三分类（关注点合并，避免多次全表扫描）：
 
 | 字段 | 聚合方式 |
@@ -138,7 +138,7 @@
 
 ### 5.2 页面骨架（screen/index.vue）
 
-1. **路由归属（R12/R19/R21/R28/R29 修订）**：`/screen` 是**顶级独立路由**（不在 `menuRoutes` 内、不经 layout 外壳渲染），当前窗口整页打开——从根上避开 layout 内 keep-alive/transition 嵌套产生的视图冻结问题。**保留 `meta.code: '/screen'`**：守卫按它做权限拦截，首页入口卡用 `v-permission="'/screen'"` 控制显隐。代价是它不在 `permissionStore` 的过滤表内，因此 `utils/routeAccess.ts` 的 `findLandingPath` 必须额外兜底 `codes.includes('/screen')`（否则「只勾大屏」的角色登录落地为 null → 404 死循环，R12 → R29 → R33 的最终解）
+1. **路由归属（R12/R19/R21/R28/R29 修订，后被 v3.14 放开判权简化）**：`/screen` 是**顶级独立路由**（不在动态路由内、不经 layout 外壳渲染），当前窗口整页打开——从根上避开 layout 内 keep-alive/transition 嵌套产生的视图冻结问题。**放开判权（2026-10-18）**：人人可见——无 meta.code、守卫无检查、首页入口卡无 v-permission；「只勾大屏」的落地死局问题（R12→R29→R33）随权限门一并退役
 2. **vw/vh 响应式适配（R32 定案，替代 scale）**：
    - `/screen` 是**独立 URL 的页面**（`127.0.0.1:5173/screen`），性质上就是响应式页面——vw/vh 单位等比铺满视口，**无 transform 缩放、无守卫页、无留白**
    - **为什么推翻 scale（R32 证据链）**：scale 方案在 M2 实现阶段连续踩坑（grid 居中轨道溢出 R31、面板内百分比高度无视标题导致重合），根源是「固定 1920 画布 + transform」的非自然布局模型——每个非 1920 视口都要付摩擦成本；而 vw 布局是真等比（无发虚、canvas 原生分辨率、ECharts `autoresize` 原生适配）
@@ -382,12 +382,12 @@
 | R25 | 热力图缺 0 维场景（无销售属性的 SPU）；单接口缺上限与触发条件 | 采纳：0 维显示「无组合视图」；§7.1 补「SKU > 2000 时拆接口」 |
 | R26 | scale 下限 0.6 与 `overflow: hidden` 冲突：下限一生效画布就大于视口，边缘被**裁掉**（信息丢失，非留白问题） | 采纳：新增「**小窗口守卫页**」——`视口 < 1920×MIN_SCALE(1152) 或 < 1080×MIN_SCALE(648)` 时不渲染面板只显示分辨率提示，阈值由 `MIN_SCALE` 派生与下限自洽；并明确 `overflow: hidden` 只管「大屏不自带滚动」，小屏由守卫页兜 |
 | R27 | 「网格」一词三义（48px 背景方格底纹 / 布局栅格 / 图表栅格线），§5.2 内部同名 | 采纳：新增 §5.2 术语约定表统一为**底纹 / 布局栅格 / 栅格线**；DOM 类名 `.screen-grid` → `.screen-layout`（避开 mockup 的 `.grid`） |
-| R28 | **大屏入口缺失**：菜单 `hidden` 不渲染、首页入口卡只出现在 R6 处置行、§5.2 与 §6 里程碑均无落地 → 实际只能手输 `/screen` | **采纳**：首页工作台入口卡（`v-permission="'/screen'"` 控显隐 + `router.push('/screen')`），home 页顺带从占位升级，写入 M2 里程碑与 §5.2 正向入口 |
-| R29 | R21 与 R12 互相打架：只勾大屏的角色登录落地 null → 404，404 返回键同样落空，永久 404 死局 | **采纳**：findFirstAccessiblePath 改「优先级降级」（先普通页、兜底 fullscreen），死局解除且保留「大屏不优先」意图 |
+| R28 | **大屏入口缺失**：菜单 `hidden` 不渲染、首页入口卡只出现在 R6 处置行、§5.2 与 §6 里程碑均无落地 → 实际只能手输 `/screen` | **采纳**：首页工作台入口卡（`v-permission="'/screen'"` 控显隐 + `router.push('/screen')`），home 页顺带从占位升级，写入 M2 里程碑与 §5.2 正向入口 **（后被 v3.14 修订：放开判权，入口卡 v-permission 移除，人人可见）** |
+| R29 | R21 与 R12 互相打架：只勾大屏的角色登录落地 null → 404，404 返回键同样落空，永久 404 死局 | **采纳**：findFirstAccessiblePath 改「优先级降级」（先普通页、兜底 fullscreen），死局解除且保留「大屏不优先」意图 **（后被 v3.14 修订：大屏放开判权，/screen 不再可勾选，「只勾大屏」场景整体退役，落地恒 /home）** |
 | R30 | 「手动走查清单」被 M4 引用 2 次却全文未定义；且 R26 守卫页与 R29 修复**无任何验收项**（1440/2560 都在守卫阈值之上，永不触发；错误态/空态也零覆盖） | 采纳：§6 新增**「手动走查清单」12 条**（含守卫页、只勾大屏落地、负向判权、错误态、空态、轮询不重播动画）；M2 验证栏补 1024×768 与只勾大屏角色的验收项 |
 | R31 | mockup 实测：grid + place-items 居中在容器小于画布时失效——隐式轨道溢出，视觉偏右下、底部被裁（1707×791 视口复现） | 采纳：居中改 absolute + translate(-50%,-50%) scale；§5.2 居中方式同步修订（**后被 R32 整体推翻**） |
 | R32 | scale 方案实现摩擦过大（R31 居中 + 面板百分比高度重合两次踩坑）；/screen 是独立 URL 页面，本就该是响应式页 | **采纳：推翻 scale，转 vw/vh 响应式布局**——真等比铺满、无留白发虚守卫页、ECharts autoresize；极小窗口字体模糊列为已知边界暂不处理 |
-| R33 | vw 响应式后大屏不再需要 layout 外壳：转顶级独立路由（当页跳转 /screen），顺带规避 keep-alive/transition 嵌套冻结；但移出 menuRoutes 使 R29 的表内 fullscreen 兜底失效，只勾大屏角色 404 死局复活 | **采纳**：/screen 移 constantRoutes 顶层；layout fullscreen 分支与 RouteMeta.fullscreen 声明删除；可达性兜底改为 findLandingPath（codes 直判 /screen），四处调用方统一收口 |
+| R33 | vw 响应式后大屏不再需要 layout 外壳：转顶级独立路由（当页跳转 /screen），顺带规避 keep-alive/transition 嵌套冻结；但移出 menuRoutes 使 R29 的表内 fullscreen 兜底失效，只勾大屏角色 404 死局复活 | **采纳**：/screen 移 constantRoutes 顶层；layout fullscreen 分支与 RouteMeta.fullscreen 声明删除；可达性兜底改为 findLandingPath（codes 直判 /screen），四处调用方统一收口 **（后被 v3.14 修订：放开判权，codes 直判兜底移除，落地恒 /home）** |
 | R34 | 布局难改：尺寸/间距/字号散落各文件，断点出现 1600/1300 孤值 | **采纳**：--dash-* 令牌块收口 + 四断点体系（1920/1200/992/768）；字号 clamp 规范、em 仅相对倍率；padding 为面板间距唯一来源 |
 | R35 | 库存总价值是单值指标，与 KPI 卡信息密度同构，独占右列半块面板浪费 | **采纳**：并入 KPI 行（金额卡保留渐变大字作视觉锚点），右列只留状态环；mockup 同步 **（后被 v3.0 微调：KPI 由 7 卡收敛为 5 卡，库存总价值为第 2 卡）** |
 | R36 | 内容稀疏的面板被拉伸填满中行不合理（状态环与底行间留大片空白）；布局应按内容量对称 | **采纳**：最新 SKU 动态移入右列（滚动表内容多、天然填满拉伸位），右列与左列内容量对称；底行改两面板（旭日图与左列同轨 + 热力图横跨剩余）；状态环按内容定高 **（后被 v3.0 修订：滚动表与旭日图面板均删除，右列改单面板「待办 SKU 清单」`flex:1` 吃满整列；底行回归热力图独占整行）** |
@@ -412,3 +412,4 @@
 | v3.11 | 2026-10-02 | **screen 模块规范化审计与整改（应要求）**。审计口径与结论：① **行内样式**——全模块仅 4 处 `:style`，全部是动态量（computed / 标识符 / 成员表达式），**没有一处是模板内静态字面量**；Vue 官方针对此的规则 `vue/no-static-inline-styles` 只报「值为 Literal」的情形，故无需改动（实测启用后零命中）。② **未用引用**——用项目自身的 ESLint（`eslint-plugin-vue` + `vueTsConfigs.recommended`）跑 `--fix-dry-run`，全模块仅 1 条 `vue/multi-word-component-names`（`index.vue`，属项目全局既有命名约定，未越界修改）；额外启用 `no-static-inline-styles`/`no-unused-properties`/`no-unused-refs`/`no-unused-emit-declarations`/`no-empty-component-block` 后**仍仅此 1 条**。③ **样式冗余**——同规则块内重复属性 0 处、模板未引用的自有 class 0 个（73 个自有 class 全部有引用）、跨文件重复选择器 0 处；`index.vue` 的 `.center`/`.left`/`.right`/`.bottom` 各被拆成多块但**无属性级重复**。**唯一实质整改**：`.dim-heat` 的 `--el-*` 令牌块从 13 个精简到 6 个 —— 删掉 2 个 Element Plus 从不读取的（`--el-bg-color`、`--el-text-color-primary`）与 5 个与浮层块重复的（`--el-bg-color-overlay`/`--el-border-color-light`/`--el-fill-color-light`/`--el-text-color-regular`/`--el-text-color-secondary`），并补注释说明「面板内 6 个服务输入框、浮层 6 个服务下拉，两者域不同故非重复」。**同时修正 v3.5 的一处错误归因**：原文称「`.dim-heat` 的变量作用不到浮层」——错，浮层是 `body` 后代、按解析规则能继承到；真正的问题是它是浮层、落在面板之外，且不显式钉死会**静默回落到页面主题**（正是当初 1.43:1 的成因）。§5.4 与 git 注释已同步更正 |
 | v3.12 | 2026-10-02 | **令牌化收口 + 修两处方向性错误（实测反馈驱动）**。① 完成 92 处硬编码颜色的令牌化（style 77 + script 37），新增 `variables.scss` 的 `$dash-*` 调色板（纯新增、0 删除，不影响其它模块）与 `.screen-canvas` 的暴露层；修正 `KpiCards` 引用了从未定义的 `--dash-text-secondary`（兜底永远生效）；去掉 3 个零消费令牌。② **错误一：脚本区误用 `var()`** —— ECharts 把颜色交给 canvas，canvas 不解析 CSS 变量，`var(--dash-*)` 一律非法（实测回落 `#000000` 并刷 `illegal color`）；且批量替换把 SCSS 插值写进了 JS 字符串（`'#{$vivo-blue}'`），每帧重绘抛 `addColorStop` 异常导致报错持续增长。修正：新增 `src/styles/dash-tokens.mts` 作为脚本侧唯一事实源（真实色值常量），41 处改为 `DASH.*`。③ **错误二：令牌挂载点** —— 调色板原挂 `.screen-canvas`（组件根）期望跨组件继承，实测未生效；改用 `:global(:root)`，布局令牌仍留 `.screen-canvas`。④ **错误三（自我纠正）**：先前用有 bug 的脚本报「嵌套超标」，正确结论是只有 `index.vue` 的 `.header .meta small .fail` 达 4 层（`@media`/`@keyframes` 被误算成嵌套层），已上提为 `.meta small` / `.meta .fail`（降到 2 层），其余 6 条 depth=3 属 `:global()` 语法包装或 `&` 状态修饰符，不应压平。规范沉淀为 §5.2.1「令牌挂载点与脚本侧色值」两条硬约束 |
 | v3.13 | 2026-10-02 | **令牌挂载点再优化（用户实测反馈）**：调色板由 `:global(:root)` 改挂 **`.screen-viewport`**（页面根容器）。两者都能工作，但页面根容器更优——① 作用域正好：随页面卸载一起销毁，不像 `:root` 把大屏专用变量留在全局根上；② 无需 `:global()` 转义绕开 scoped 属性选择器；③ 它是所有消费方的最近公共祖先，跨组件消费只剩一层父子关系。布局令牌仍留 `.screen-canvas`。§5.2.1 判据同步修正为「跨组件 → 挂页面根容器；本页/本组件 → 挂组件根类」 |
+| v3.14 | 2026-10-18 | **RBAC v2 联动：大屏放开判权（用户定案）**。背景：RBAC 动态路由改造（code 拆分 perms/path、后端下发路由表、前端 addRoute）中，用户定案静态页统一人人可见——/screen 与 /home 同待遇。四处联动落地：① 后端 `routes/dashboard.ts` 移除 `requirePermission('screen:view')`（仅 auth）；② 种子 /screen、/home 两节点 perms 置空（纯展示节点），seed:admin 的 user 角色基线改空权限；③ 前端守卫删除 /screen 的 hasPerm 检查、首页入口卡删除 v-permission；④ boundary 测试「无 /screen 权限 → 403」改写为「无任何权限 → 200」，168/168 全绿。连带：403 自愈的 accessible 判定对 /screen 显式豁免（静态恒可达，收权不误踢）；「只勾大屏」细粒度场景退役（R28/R29/R33 处置标注修订）。另：面包屑改为显示隐藏页（hidden 只管菜单渲染）、SKU 图片列加占位底色防翻页闪烁（均属本次联动批次的小修复） |

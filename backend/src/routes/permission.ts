@@ -8,10 +8,9 @@ const router = Router()
 router.use(auth)
 
 // 权限管理
-// GET 多 code（任一满足）：菜单管理页、角色分配抽屉都是消费方（rbac-design §4.3）
 router.get(
   '/',
-  requirePermission('/acl/menus', 'role:assign-perm'),
+  requirePermission('permission:list', 'role:assign-perm'),
   permissionController.listPermissions,
 )
 router.post('/', requirePermission('permission:create'), permissionController.createPermission)

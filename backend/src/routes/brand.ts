@@ -8,10 +8,10 @@ const router = Router()
 
 router.use(auth)
 
-router.get('/', requirePermission('/product/trademark'), brandController.listBrands)
+router.get('/', requirePermission('brand:list'), brandController.listBrands)
 router.get(
   '/all',
-  requirePermission('/product/trademark', '/product/spu'),
+  requirePermission('brand:list', 'spu:list'),
   brandController.listAllBrands,
 )
 router.post('/', requirePermission('brand:create'), brandController.createBrand)

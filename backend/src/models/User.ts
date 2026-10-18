@@ -77,7 +77,7 @@ userSchema.pre('save', async function () {
 export const User = mongoose.model<IUser>('User', userSchema)
 
 // 对外返回的用户数据 — 隐藏 password，_id 映射为 userId
-// 权限 codes 不在这里：由 controller 调用 rbac 聚合后合并（列表接口不需要逐个聚合，避免 N 次查询）
+// 权限 perms 不在这里：由 controller 调用 rbac 聚合后合并（列表接口不需要逐个聚合，避免 N 次查询）
 export function toUserDTO(user: IUser & { _id: unknown }) {
   return {
     userId: String(user._id),

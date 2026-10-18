@@ -12,8 +12,8 @@ import { Permission } from '../src/models/Permission.js'
 const ADMIN_PHONE = '13800138000'
 const ADMIN_PASSWORD = '123456' // 与边界测试超管登录用例保持一致；已存在的账号 seed 不改密码
 
-// 特权专用 code：仅 super_admin 角色持有，四向特权保护统一判据
-const GRANT_SUPER_CODE = 'role:grant-super'
+// 特权专用 perms：仅 super_admin 角色持有，四向特权保护统一判据
+const GRANT_SUPER_PERMS = 'role:grant-super'
 
 // 基础角色：与前端用户管理「角色分配」抽屉的选项保持一致
 // builtin = 内置角色标记：不可改名/删除，授予/撤销需持 role:grant-super
@@ -52,17 +52,15 @@ async function main() {
   }
 
   // ② 权限分配（种子语义 = 覆盖到基线）：
-  //    super_admin → 全量；admin → 除 grant-super 外全量；user → /home + /screen
-  const allPerms = await Permission.find().select('code').lean()
-  const grantSuper = allPerms.find((p) => p.code === GRANT_SUPER_CODE)
+  //    super_admin → 全量；admin → 除 grant-super 外全量；user → 空权限（静态页人人可见，放开判权定案）
+  const allPerms = await Permission.find().select('perms').lean()
+  const grantSuper = allPerms.find((p) => p.perms === GRANT_SUPER_PERMS)
   if (!grantSuper) {
-    throw new Error(`权限树缺少 ${GRANT_SUPER_CODE}：请先运行 seed:permissions`)
+    throw new Error(`权限树缺少 ${GRANT_SUPER_PERMS}：请先运行 seed:permissions`)
   }
   const allIds = allPerms.map((p) => p._id)
-  const adminIds = allPerms.filter((p) => p.code !== GRANT_SUPER_CODE).map((p) => p._id)
-  const userIds = allPerms
-    .filter((p) => p.code === '/home' || p.code === '/screen')
-    .map((p) => p._id)
+  const adminIds = allPerms.filter((p) => p.perms !== GRANT_SUPER_PERMS).map((p) => p._id)
+  const userIds: unknown[] = []
 
   await Role.updateOne({ roleName: 'super_admin' }, { $set: { permissions: allIds } })
   await Role.updateOne({ roleName: 'admin' }, { $set: { permissions: adminIds } })
@@ -70,7 +68,8 @@ async function main() {
   console.log(`✅ 基础角色已就绪（${BASE_ROLES.length} 个），权限分配已同步基线`)
 
   // 洗存量（rbac-design §4.5）：历史角色可能存过根节点 id（开发期勾选过「全部数据」），统一 $pull
-  const root = await Permission.findOne({ code: '/' }).select('_id').lean()
+  // 根节点按结构键定位：全树唯一 parentId = null（v2 起无 code 字段）
+  const root = await Permission.findOne({ parentId: null }).select('_id').lean()
   if (root) {
     const { modifiedCount } = await Role.updateMany({}, { $pull: { permissions: root._id } })
     if (modifiedCount > 0) {

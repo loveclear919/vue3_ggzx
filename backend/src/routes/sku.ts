@@ -8,7 +8,7 @@ const router = Router()
 
 router.use(auth)
 
-router.get('/', requirePermission('/product/spu/sku'), skuController.listSkus)
+router.get('/', requirePermission('sku:list'), skuController.listSkus)
 router.post('/', requirePermission('sku:generate'), skuController.generateSkus)
 router.patch('/:id', requirePermission('sku:update'), skuController.updateSku)
 router.delete('/', requirePermission('sku:clear'), skuController.clearSkus)

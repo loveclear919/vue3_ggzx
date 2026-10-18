@@ -6,7 +6,7 @@ import { escapeRegExp } from '../utils/escapeRegExp.js'
 import { normalizePage } from '../utils/pagination.js'
 import { rethrowConflict } from '../utils/mongoError.js'
 import { User } from '../models/User.js'
-import { hasCode, grantSuperPermissionId } from './rbac.js'
+import { hasPerm, grantSuperPermissionId } from './rbac.js'
 
 // 业务层：角色管理（列表 / 新增 / 更新 / 删除）
 
@@ -56,10 +56,10 @@ export async function createRole(roleName: string, remark?: string) {
 }
 
 // 权限 id 校验：根节点剔除 → 去重 → 格式 → 值域。
-// 根节点（code '/'）静默剔除而非报错（rbac-design §4.5）：存量角色可能已勾过根
+// 根节点（parentId = null）静默剔除而非报错（rbac-design §4.5）：存量角色可能已勾过根
 // （EP 的 getCheckedKeys 对 disabled 节点照常返回勾选值），抛 400 会让这些角色永久保存失败
 async function validatePermissionIds(permissions: string[]): Promise<string[]> {
-  const root = await Permission.findOne({ code: '/' }).select('_id').lean()
+  const root = await Permission.findOne({ parentId: null }).select('_id').lean()
   const rootId = root ? String(root._id) : null
   const unique = [...new Set(permissions)].filter((id) => id !== rootId)
   for (const id of unique) {
@@ -80,7 +80,7 @@ async function validatePermissionIds(permissions: string[]): Promise<string[]> {
 export async function updateRole(
   id: string,
   body: Record<string, unknown>,
-  operatorCodes?: Set<string>,
+  operatorPerms?: Set<string>,
 ) {
   const target = await Role.findById(id).select('builtin permissions roleName').lean()
   if (!target) {
@@ -92,7 +92,7 @@ export async function updateRole(
     if (typeof body.roleName === 'string' && body.roleName.trim() !== target.roleName) {
       throw AppError.forbidden('内置角色不可改名')
     }
-    if (!hasCode(operatorCodes, 'role:grant-super')) {
+    if (!hasPerm(operatorPerms, 'role:grant-super')) {
       throw AppError.forbidden('修改内置角色需要超级授权')
     }
   }
@@ -116,14 +116,14 @@ export async function updateRole(
       throw AppError.badRequest('权限格式不合法')
     }
     // 分配权限属独立操作：先验操作码（§4.4 #4）
-    if (!hasCode(operatorCodes, 'role:assign-perm')) {
+    if (!hasPerm(operatorPerms, 'role:assign-perm')) {
       throw AppError.forbidden('没有分配权限的权限')
     }
     // 分配权限抽屉提交：空数组 = 撤销全部权限，合法
     const permissionIds = await validatePermissionIds(body.permissions)
     // 提权闭环（§4.4 #6）：授予 grant-super 须自身持有它
     const grantId = await grantSuperPermissionId()
-    if (grantId && permissionIds.includes(grantId) && !hasCode(operatorCodes, 'role:grant-super')) {
+    if (grantId && permissionIds.includes(grantId) && !hasPerm(operatorPerms, 'role:grant-super')) {
       throw AppError.forbidden('授予超级授权需要超级授权')
     }
     // 防自我锁死：内置角色不可移除 grant-super（§4.4 补充，与「最后一名超管」保护双保险）

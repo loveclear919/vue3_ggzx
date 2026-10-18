@@ -7,10 +7,10 @@ import { computed } from 'vue'
 const $route = useRoute()
 const settingStore = useSettingStore()
 const changeIcon = () => {
-  settingStore.fold = !settingStore.fold
+  settingStore.toggleFold()
 }
 const bread = computed(() => {
-  return $route.matched.filter((item) => item.meta.title && item.meta.hidden !== true)
+  return $route.matched.filter((item) => item.meta.title && item.name !== 'layout')
 })
 </script>
 <template>

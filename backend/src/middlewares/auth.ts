@@ -6,7 +6,7 @@ import { AppError } from '../utils/AppError.js'
 export interface AuthRequest extends Request {
   userId?: string
   // requirePermission 聚合后挂在 req 上
-  permissionCodes?: Set<string>
+  permissionPerms?: Set<string>
 }
 
 export function auth(req: AuthRequest, _res: Response, next: NextFunction): void {

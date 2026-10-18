@@ -1,6 +1,6 @@
 # RBAC 权限闭环设计方案
 
-> 状态：**已全部落地**（v1.3，M1~M4 完成，158 例边界测试全绿）。本文自包含，不依赖记忆文件。
+> 状态：**v1 已全部落地**（v1.3，M1~M4，158 例边界测试全绿）；**v2 动态路由改造已落地**（2026-10，边界测试 168/168，见 §8）。§3~§7 为 v1 历史定案（已按 v2 修订的细节以 §8 为准）。本文自包含，不依赖记忆文件。
 
 ## 1. 目标与闭环
 
@@ -242,6 +242,62 @@ permission-drawer 的 el-tree：props 加 `disabled` 函数（`data.code === '/'
 5. **两种 code 风格并存**：菜单路径式（与路由对账直观）、操作冒号式（层级语义清晰），是主流项目惯例
 6. **守卫 fail-open**：前端只是体验层，网络抖动时宁可放行（后端会兜），不误伤登录态——与 guards.ts 既有定案一致
 
+## 8. v2 动态路由改造（对齐若依，2026-10）
+
+### 8.1 权限模型：code 拆分
+
+v1 的 `code` 字段（菜单路径式 + 按钮冒号式混合）拆为若依式多字段：
+
+| 字段 | 语义 | 占位 |
+|---|---|---|
+| `perms` | 权限标识（判权/指令契约）：页面 `user:list`、按钮 `user:create`；分组/根节点为 '' | 非空值唯一（**partial index `$gt: ''`**——MongoDB 部分索引不支持 `$ne`） |
+| `path` | menu 专用路由地址（绝对路径 `/acl/users`） | 按钮/根节点 '' |
+| `component` | menu 叶子组件路径（`acl/user/index`） | 分组/按钮 '' |
+| `icon` / `hidden` | 图标名 / 不渲染菜单但可直达（SKU） | 按钮缺省 |
+
+- 根节点 = 结构键 **`parentId: null`**（全树唯一，不再用 code '/'）
+- **perms/path 全字段可编辑**（若依式，纠错直接改，code 输错问题消失）
+- 业务节点必须挂父级（顶级菜单挂根节点），`validateParentFor` 拒绝空父级
+- 按钮 perms 与 v1 完全一致（`brand:create` 本就是若依风格）——按钮链路零迁移
+
+### 8.2 后端契约
+
+- `getUserRbac(userId)`：一次聚合产出 `{ perms: Set, routes: MenuRouteNode[] }`——祖先补全同趟收集按钮标识与授权菜单 id；路由树 = `{ path, title, icon, hidden, component, children }`，**排除静态页 /home /screen**、空分组剪枝（自底向上单趟达不动点）、防环挂载
+- 登录/注册/getInfo 响应：`user: { ..., perms: string[], routes: 树 }`（v1 的 codes 退役）
+- 接口挂载：页面级 GET 挂菜单 perms（`spu:list` 等），操作级挂按钮 perms（不变）；中间件改用轻量 `getPermsForUser`（不带树，每请求实时聚合不变）
+- 种子：菜单节点补 component/icon/hidden；**SKU 与 SPU 平级挂 /product**（对齐若依：C 类页面无子菜单，权限树 = 路由树，免前端归一化）；v1 数据**原位迁移**（按 legacyCode $set 新字段 + $unset code，保 _id 角色引用不断裂；SKU 跨父由 upsert 的 parentChanged 逻辑重排 sortIndex 防 11000）
+
+### 8.3 前端架构：静态壳 + 动态 addRoute
+
+- 静态壳（前端承载，无需后端返回）：/login、/home（人人可达）、/screen（守卫按 `screen:view` 判权）、/404、layout、catch-all
+- 动态路由：login/getInfo 的 routes → `dynamicRoutes.ts` 的 glob 组件映射 + `mapBackendRoutes` 直映射 → `addRoute('layout', r)`；快照与注册表**同数组**（菜单/落地页/404/守卫四消费方同源，结构上不分叉）
+- 守卫时序：刷新直达动态路由 → catch-all 先重定向 /404 → 守卫 fetch + 注册 → `to.redirectedFrom` 取回原目标 → `router.resolve` 重判可达 → replace 重放；注册后仍不可达：原目标 = lastVisited → 回退落地页（R15 保留），其余 → 404 信息隐藏
+- 登出：`removeFns`（addRoute 返回的移除函数）物理摘除 + 快照清空——换账号看不到上个账号的菜单
+- HMR 兜底：userInfo 在而注册丢 → 用内存 `userInfo.routes` 重建（不重发请求）
+
+### 8.4 403 自愈
+
+request.ts 403 分支（`/auth/` 豁免、`isHandling403` 去重）：弹一次文案 → 静默重拉 fetchUserInfo（buildRoutes 先摘后建，路由/菜单收敛，按钮经 v-permission updated 钩子随 perms 纠正）→ 当前页不可达（含 /screen 收权）→ `replace(落地页)`（/home 静态无接口，无循环）。
+
+### 8.5 行为变化（对照 v1）
+
+| 项 | v1 | v2 |
+|---|---|---|
+| 只勾大屏角色落地 | /screen（R29） | **/home**（home 人人可达） |
+| 大屏权限门 | screen:view 三处判权（守卫/入口卡/接口） | **2026-10-18 放开判权定案**：静态页人人可见，三处判权全移除，种子 /home /screen perms 置空 |
+| fail-open（网络错误） | 全静态注册天然页面可达 | **不注册**，直连落 404 页（评审：兜底镜像价值薄、维护成本实） |
+| 权限变更生效 | 需刷新 | 下一个请求 403 → 自愈收敛 |
+| 面包屑 | hidden 页不显示 | 显示隐藏页（hidden 只管菜单） |
+
+### 8.6 关键取舍（面试可讲）
+
+1. **权限树 = 路由树**：SKU 与 SPU 平级（若依 C 菜单无子菜单），免"组件节点子级上提"归一化
+2. **path 用绝对路径**：单层分组免拼接（若依相对路径的简化）
+3. **perms 保持唯一**：若依无约束，但前端指令按字符串匹配需无歧义（部分索引实现"非空才唯一"）
+4. **全表内存聚合保留**：36 节点 KB 级，固定 3 次查询 + 快照一致性；表大且授权稀疏时逐层上溯/$graphLookup 是升级路径
+5. **vue-router 5 类型坑**：`RawRouteComponent` 已改名 `RouteComponent`；Vue Component 类型过宽（FunctionalComponent 返回 any），懒函数会被误认成函数式组件——类型检查通过 ≠ 语义正确
+6. **Mongoose update 严格模式**：schema 移除的字段，`$unset` 会被静默剥掉，legacy 字段删除需 `{ strict: false }`
+
 ---
 
 ## 变更记录
@@ -252,6 +308,7 @@ permission-drawer 的 el-tree：props 加 `disabled` 函数（`data.code === '/'
 | v1.1 | 2026-09-27 | 吸收评审 R1~R16：祖先补全改全表内存上溯；GET 多 code 挂载；特权保护扩至六条（assign 落点/提权闭环/最后一名超管）；根 id 静默剔除 + 洗存量；种子显式 sortIndex 与 $set 改挂；守卫 fail-open 与 lastVisited 回退；buildMenuRoutes 触发点收口 store；指令 display 切换；Set 边界约定；service 显式 operatorCodes；启动 warn 断言；404 理由入权衡 |
 | v1.2 | 2026-09-30 | 实施期补记两条：① **默认角色 user 的改名契约**——user 角色不标 builtin（可改可删，普通角色给灵活性），代价是改名后注册报 500「默认角色缺失」，重跑 seed:admin 即恢复；只有静默塌陷的系统契约（super_admin）才上 builtin 硬保护（曾考虑过「启动时自修复」方案 B，最终定案保持现状）；② **存量角色形状修复**——权限模块落地前创建的旧角色文档没有 `permissions` 键，读取侧三处（hadGrant/聚合/toRoleDTO）必须 `?? []` 防御 undefined，seed 加 `$exists: false` 补空数组。教训：默认值只保证「新建时」有，读 DB 文档永不假定形状。 |
 | v1.3 | 2026-09-30 | 实施后问答审查批次的修订汇总：① **同名提交放行**——builtin 改名拦截改为「值真的变了才拦」（前端表单恒带 roleName）；② **最后一名超管保护收窄**——只拦「新 roles 不再产出 grant-super」，追加普通角色放行；③ **祖先上溯 visited 防环**（rbac 聚合 + validateParentFor 双处，成环脏数据不再死循环）；④ **种子跨父恢复重排**（parentChanged 时重排到目标父级末尾，11000 免疫）；⑤ **商品页按钮 code 铺开**（12 按钮 + 6 组路由挂载 + v-permission）；⑥ 菜单过滤空分组整组剔除（children: [] 不再渲染成可点叶子）；⑦ 登录落地与 404 返回入口动态化（routeAccess 工具三处共用）；⑧ 401 分支带 redirect + 去重 + auth 豁免；⑨ RouteMeta 声明 code 去除 as 断言；⑩ 体验层禁用（内置角色行按钮与分配选项按 grant-super 禁用）与 fail-open 提示。 |
+| v2.0 | 2026-10-17 | **动态路由改造（对齐若依）**：code 拆分为 perms/path/component/icon/hidden；后端下发授权路由树 + 前端 addRoute 动态注册（静态壳保留）；403 自愈；边界测试 163→168 全绿；数据原位迁移保角色引用。详见 §8。 |
 
 ## 评审意见与处置
 

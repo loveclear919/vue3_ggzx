@@ -3,12 +3,27 @@ import Logo from '@/layout/logo/index.vue'
 import Menu from '@/layout/menu/index.vue'
 import Main from '@/layout/main/index.vue'
 import TabBar from '@/layout/tabbar/index.vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { usePermissionStore } from '@/stores/permission'
 import { useSettingStore } from '@/stores/setting'
+
 const settingStore = useSettingStore()
 const permissionStore = usePermissionStore()
 const route = useRoute()
+
+const smallScreen = matchMedia('(max-width: 768px)')
+const applyAutoFold = () => {
+  if (settingStore.foldManual) return
+  settingStore.fold = smallScreen.matches
+}
+onMounted(() => {
+  smallScreen.addEventListener('change', applyAutoFold)
+  applyAutoFold()
+})
+onUnmounted(() => {
+  smallScreen.removeEventListener('change', applyAutoFold)
+})
 </script>
 <template>
   <div class="layout_container" :class="{ collapsed: settingStore.fold }">
@@ -85,8 +100,6 @@ const route = useRoute()
 
   .layout_main {
     position: absolute;
-    // 关键：非 auto 的 z-index 让内容区形成独立层叠上下文，
-    // 内部组件（el-table sticky 头、固定列等）的 z-index 永不外溢压过外壳
     z-index: 0;
     left: var(--menu-width);
     top: $base-tabbar-height;

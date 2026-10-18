@@ -38,7 +38,7 @@ export async function updateRole(req: AuthRequest, res: Response) {
   const data = await roleService.updateRole(
     id,
     (req.body ?? {}) as Record<string, unknown>,
-    req.permissionCodes,
+    req.permissionPerms,
   )
   ok(res, data, '更新成功')
 }

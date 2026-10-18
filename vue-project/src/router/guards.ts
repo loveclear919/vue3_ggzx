@@ -9,6 +9,7 @@ import { usePermissionStore } from '@/stores/permission'
 import { LAST_VISITED_KEY, TOKEN_KEY } from '@/utils/storage'
 import { findLandingPath, isPathAccessible } from '@/utils/routeAccess'
 import { isAxiosError } from 'axios'
+import router from '@/router'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
 
@@ -28,31 +29,48 @@ export const authGuard: NavigationGuardWithThis<undefined> = async (to) => {
 
   const hasToken = () => !!localStorage.getItem(TOKEN_KEY)
 
-  // 已登录 不再返回登录页：恢复点若已无权限（角色被改/换账号），回退到第一个可达菜单（R15）
+  // 已登录 不再返回登录页：先恢复 userInfo（顺带注册动态路由），再按可达性算落地
   if (to.path === '/login' && hasToken()) {
+    if (!userStore.userInfo) {
+      try {
+        await userStore.fetchUserInfo()
+        warnedInfoFetchFailure = false
+      } catch (error) {
+        // 只有 token 真失效才放行登录页；网络错误 fail-open（不注册动态路由，404 页兜底）
+        if (isAxiosError(error) && error.response?.status === 401) {
+          userStore.logout()
+          return true
+        }
+        if (!warnedInfoFetchFailure) {
+          warnedInfoFetchFailure = true
+          ElMessage.warning('用户信息加载失败，请刷新重试')
+        }
+      }
+    } else if (!permissionStore.isRoutesAdded) {
+      // HMR 等极端场景兜底：userInfo 在但注册丢了 → 用内存路由表重建
+      permissionStore.buildRoutes(userStore.userInfo.routes)
+    }
+
+    // 落地页计算：优先恢复上次访问页，否则按路由表找第一个可达页
     const last = localStorage.getItem(LAST_VISITED_KEY) || ''
     const lastPath = last.split('?')[0]
-    if (userStore.userInfo) {
-      // HMR 等极端场景兜底：userInfo 在但菜单表还没构建
-      if (permissionStore.routes.length === 0) {
-        permissionStore.buildMenuRoutes(userStore.userInfo.codes)
-      }
-      if (lastPath && !isPathAccessible(lastPath, permissionStore.routes)) {
-        return findLandingPath(permissionStore.routes, userStore.userInfo.codes) || '/'
-      }
+    if (lastPath && !isPathAccessible(lastPath, permissionStore.routes)) {
+      return findLandingPath(permissionStore.routes)
     }
-    // userInfo 未恢复（刷新直达登录页）：fail-open 先去，下一跳拉取后再判权
-    return last || findLandingPath(permissionStore.routes, userStore.userInfo?.codes ?? []) || '/'
+    return last || findLandingPath(permissionStore.routes)
   }
+
   // 白名单直接放行
   if (whiteList.includes(to.path)) {
     return true
   }
+
   // 未登录 → 去登录页，并记录"本来想去哪"
   if (!hasToken()) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
-  // 已登录但用户信息还没恢复（刷新场景）→ 拉取
+
+  // 已登录但用户信息还没恢复（刷新场景）→ 拉取 + 注册动态路由
   if (!userStore.userInfo) {
     try {
       await userStore.fetchUserInfo()
@@ -63,30 +81,35 @@ export const authGuard: NavigationGuardWithThis<undefined> = async (to) => {
         userStore.logout()
         return { path: '/login', query: { redirect: to.fullPath } }
       }
-      // fail-open 的代价是侧边栏可能为空：提示一次原因（连续失败不重复轰炸，成功拉取后复位）
       if (!warnedInfoFetchFailure) {
         warnedInfoFetchFailure = true
-        ElMessage.warning('用户信息加载失败，菜单可能不完整，请稍后刷新重试')
+        ElMessage.warning('用户信息加载失败，请刷新重试')
       }
     }
+  } else if (!permissionStore.isRoutesAdded) {
+    permissionStore.buildRoutes(userStore.userInfo.routes)
   }
 
-  // 判权：以 userInfo 存在为前提（拉取失败 fail-open —— 前端是体验层，安全边界在后端 403）
-  const code = to.meta.code
-  if (userStore.userInfo && code && !userStore.userInfo.codes.includes(code)) {
-    // 恢复落脚点已无权限（如换低权限账号继承了 lastVisited）→ 回退可达菜单；
-    // 手输 URL 越权 → 404（信息隐藏：不暴露资源存在性）
-    const lastPath = (localStorage.getItem(LAST_VISITED_KEY) || '').split('?')[0]
-    if (to.path === lastPath) {
-      return findLandingPath(permissionStore.routes, userStore.userInfo.codes) ?? '/404'
+  // 刷新后动态路由重新挂载 需要 404 重放
+  if (to.name === '404' && to.redirectedFrom && permissionStore.isRoutesAdded) {
+    const target = to.redirectedFrom
+    const resolved = router.resolve(target)
+    if (resolved.name !== 'not-found' && resolved.name !== '404') {
+      return { path: target.path, query: target.query, hash: target.hash, replace: true }
     }
-    return '/404'
+    // 注册后仍不可达：恢复落脚点已无权限 → 回退第一个可达菜单
+    const lastPath = (localStorage.getItem(LAST_VISITED_KEY) || '').split('?')[0]
+    if (target.path === lastPath) {
+      return findLandingPath(permissionStore.routes)
+    }
+    return true
   }
-  // 一切正常，放行
+
+  // 判权收窄：菜单路由由注册表物理拦截（无权即未注册）；静态页 home / screen 人人可见（放开判权定案）
   return true
 }
 
-// 记录最后访问页面（供下次登录恢复）
+// 记录最后访问页面
 export const trackLastVisited: NavigationHookAfter = (to, _from, failure) => {
   if (failure) return // 导航失败不记录
   if (!UNTRACKED_PATHS.includes(to.path)) {
@@ -112,7 +135,7 @@ export const setPageTitle: NavigationHookAfter = (to, _from, failure) => {
   document.title = to.meta.title ? `${to.meta.title} - ${siteTitle}` : siteTitle
 }
 
-// 统一注册入口：router 侧只调这一个函数
+// 统一注册入口
 export function setupGuards(router: Router) {
   router.beforeEach(progressStart)
   router.beforeEach(authGuard)

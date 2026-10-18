@@ -1,83 +1,18 @@
 import type { RouteRecordRaw } from 'vue-router'
 
-// 菜单路由（挂在 layout 下）：meta.code 与后端权限树 code 对账（RBAC 三消费方之一），
-// 菜单显隐 = 静态路由 ∩ 登录聚合 codes（permission store 过滤，不 addRoute）
-// 契约：分组 = children 非空数组；children: [] 视同叶子（保留为可点击项）；叶子 = 无 children 字段。
-// 三个消费方（permission store 过滤 / menu 渲染 / 守卫可达性）都按此判定，改一处需三处同步
-export const menuRoutes: RouteRecordRaw[] = [
-  {
-    path: '/home',
-    name: 'home',
-    component: () => import('@/views/home/index.vue'),
-    meta: { title: '首页', icon: 'HomeFilled', hidden: false, code: '/home' },
-  },
-  {
-    path: '/acl',
-    name: 'acl',
-    redirect: '/acl/users',
-    meta: { title: '权限管理', icon: 'Lock', hidden: false, code: '/acl' },
-    children: [
-      {
-        path: '/acl/users',
-        name: 'users',
-        component: () => import('@/views/acl/user/index.vue'),
-        meta: { title: '用户管理', icon: 'User', hidden: false, code: '/acl/users' },
-      },
-      {
-        path: '/acl/roles',
-        name: 'roles',
-        component: () => import('@/views/acl/role/index.vue'),
-        meta: { title: '角色管理', icon: 'UserFilled', hidden: false, code: '/acl/roles' },
-      },
-      {
-        path: '/acl/menus',
-        name: 'menus',
-        component: () => import('@/views/acl/permission/index.vue'),
-        meta: { title: '菜单管理', icon: 'Menu', hidden: false, code: '/acl/menus' },
-      },
-    ],
-  },
-  {
-    path: '/product',
-    name: 'product',
-    redirect: '/product/trademark',
-    meta: { title: '商品管理', icon: 'Goods', hidden: false, code: '/product' },
-    children: [
-      {
-        path: '/product/trademark',
-        name: 'trademark',
-        component: () => import('@/views/product/trademark/index.vue'),
-        meta: {
-          title: '品牌管理',
-          icon: 'CollectionTag',
-          hidden: false,
-          code: '/product/trademark',
-        },
-      },
-      {
-        path: '/product/attr',
-        name: 'attr',
-        component: () => import('@/views/product/attr/index.vue'),
-        meta: { title: '属性管理', icon: 'ChromeFilled', hidden: false, code: '/product/attr' },
-      },
-      {
-        path: '/product/spu',
-        name: 'spu',
-        component: () => import('@/views/product/spu/index.vue'),
-        meta: { title: 'SPU管理', icon: 'Management', hidden: false, code: '/product/spu' },
-      },
-      {
-        path: '/product/spu/sku',
-        name: 'sku',
-        component: () => import('@/views/product/sku/index.vue'),
-        // hidden：不渲染菜单但可直达（SPU 页跳转），守卫仍按 code 拦截
-        meta: { title: 'SKU管理', hidden: true, code: '/product/spu/sku' },
-      },
-    ],
-  },
-]
+// 路由分两层：
+// 静态壳：/login、/home、/screen、/404、layout、catch-all —— 前端承载，无需后端返回
+// 动态路由：/acl、/product 子树 —— 登录后由后端路由表驱动注册（dynamicRoutes.ts + permission store）
+// 静态页权限语义：home / screen 人人可见（放开判权定案，无权限门）
 
-export const constantRoutes = [
+export const homeRoute: RouteRecordRaw = {
+  path: '/home',
+  name: 'home',
+  component: () => import('@/views/home/index.vue'),
+  meta: { title: '首页', icon: 'HomeFilled', hidden: false },
+}
+
+export const constantRoutes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'login',
@@ -85,20 +20,19 @@ export const constantRoutes = [
     meta: { title: '登录', hidden: true },
   },
   {
-    // 顶级独立路由：不经 layout 外壳渲染（无侧栏/顶栏），当前窗口整页打开；
-    // 从根上避开 layout 内 keep-alive/transition 嵌套产生的视图冻结问题
     path: '/screen',
     name: 'screen',
     component: () => import('@/views/screen/index.vue'),
-    // code 保留：守卫按它做权限拦截（首页入口卡片的 v-permission 同理）
-    meta: { title: '数据大屏', hidden: true, code: '/screen' },
+    // 权限门在守卫（hasPerm('screen:view')），不落 meta
+    meta: { title: '数据大屏', hidden: true },
   },
   {
     path: '/',
     name: 'layout',
     component: () => import('@/layout/index.vue'),
     meta: { title: 'layout', hidden: true },
-    children: menuRoutes,
+    // 静态子级只有首页；动态路由由 addRoute('layout', r) 挂入（permission store）
+    children: [homeRoute],
     redirect: '/home',
   },
   {
@@ -108,6 +42,8 @@ export const constantRoutes = [
     meta: { title: '404', hidden: true },
   },
   {
+    // catch-all 兜底：动态路由注册前，未知路径先重定向 404
+    // 守卫用 to.redirectedFrom 取回原目标，注册完成后重放导航（见 guards.ts）
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     redirect: '/404',

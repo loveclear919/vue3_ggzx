@@ -16,7 +16,7 @@ router.patch('/info', userController.updateInfo)
 router.patch('/password', userController.changePassword)
 
 // 用户管理
-router.get('/', requirePermission('/acl/users'), userController.listUsers)
+router.get('/', requirePermission('user:list'), userController.listUsers)
 router.post('/', requirePermission('user:create'), userController.createUser)
 router.patch('/:id', requirePermission('user:update'), userController.updateUser)
 router.delete('/:id', requirePermission('user:delete'), userController.deleteUser)

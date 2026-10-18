@@ -10,7 +10,7 @@ router.use(auth)
 
 router.get(
   '/',
-  requirePermission('/product/attr', '/product/spu'),
+  requirePermission('attr:list', 'spu:list'),
   categoryController.listCategories,
 )
 

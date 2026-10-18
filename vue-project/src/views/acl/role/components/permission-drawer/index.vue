@@ -19,11 +19,11 @@ const root = computed(() =>
 
 const treeRef = ref<InstanceType<typeof ElTree>>()
 
-// 根节点（code '/'）不是权限值：禁用勾选。
+// 根节点（parentId = null，全树唯一结构容器）不是权限值：禁用勾选。
 // 注意 EP 语义：disabled 节点的【已勾选状态】仍会被 getCheckedKeys 返回 —— 后端 updateRole 另有静默剔除兜底
 const treeProps = {
   label: 'name',
-  disabled: (data: { code?: string }) => data.code === '/',
+  disabled: (data: { parentId?: string | null }) => data.parentId === null,
 }
 
 const { submitting, submit } = useFormSubmit({

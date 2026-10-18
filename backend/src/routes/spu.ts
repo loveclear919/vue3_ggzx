@@ -8,8 +8,8 @@ const router = Router()
 
 router.use(auth)
 
-router.get('/', requirePermission('/product/spu'), spuController.listSpus)
-router.get('/:id', requirePermission('/product/spu', '/product/spu/sku'), spuController.getSpuById)
+router.get('/', requirePermission('spu:list'), spuController.listSpus)
+router.get('/:id', requirePermission('spu:list', 'sku:list'), spuController.getSpuById)
 router.post('/', requirePermission('spu:create'), spuController.createSpu)
 router.patch('/:id', requirePermission('spu:update'), spuController.updateSpu)
 router.delete('/:id', requirePermission('spu:delete'), spuController.deleteSpu)

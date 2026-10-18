@@ -8,7 +8,7 @@ const router = Router()
 
 router.use(auth)
 
-router.get('/', requirePermission('/product/attr'), attrController.listAttrs)
+router.get('/', requirePermission('attr:list'), attrController.listAttrs)
 router.post('/', requirePermission('attr:create'), attrController.createAttr)
 router.patch('/:id', requirePermission('attr:update'), attrController.updateAttr)
 router.delete('/:id', requirePermission('attr:delete'), attrController.deleteAttr)

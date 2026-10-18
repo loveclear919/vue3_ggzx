@@ -8,6 +8,6 @@ const router = Router()
 
 router.use(auth)
 
-router.get('/', requirePermission('/product/spu'), baseSaleAttrController.listBaseSaleAttrs)
+router.get('/', requirePermission('spu:list'), baseSaleAttrController.listBaseSaleAttrs)
 
 export default router

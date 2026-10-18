@@ -15,7 +15,7 @@ const emit = defineEmits<{ success: [] }>()
 const assignRoles = ref<string[]>([])
 
 // 内置角色选项仅 grant-super 持有者可勾选（体验层禁用；后端 403 仍是裁决）
-const hasGrantSuper = computed(() => useUserStore().hasCode('role:grant-super'))
+const hasGrantSuper = computed(() => useUserStore().hasPerm('role:grant-super'))
 const isBuiltinDisabled = (option: RoleRow) => option.builtin && !hasGrantSuper.value
 
 watch(drawerVisible, (opened) => {

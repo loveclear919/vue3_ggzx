@@ -7,7 +7,7 @@ import { escapeRegExp } from '../utils/escapeRegExp.js'
 import { normalizePage } from '../utils/pagination.js'
 import { isDuplicateKeyError, rethrowConflict } from '../utils/mongoError.js'
 import { generateDefaultUsername } from '../utils/defaultUsername.js'
-import { hasCode, builtinRoleIds, grantSuperHolderUserIds, grantSuperPermissionId } from './rbac.js'
+import { hasPerm, builtinRoleIds, grantSuperHolderUserIds, grantSuperPermissionId } from './rbac.js'
 
 // 默认展示名重试上限：随机 6 位数字碰撞概率约 1/10⁶，3 次足够
 const USERNAME_RETRY = 3
@@ -144,13 +144,13 @@ async function defaultRoleId(): Promise<string> {
 }
 
 // 新增用户（注册 / 管理端共用）
-// operatorCodes：注册入口不传（roles 必为空，走默认角色，无特权操作）；管理端创建传 req.permissionCodes
+// operatorPerms：注册入口不传（roles 必为空，走默认角色，无特权操作）；管理端创建传 req.permissionPerms
 export async function createUser(
   phone: string,
   password: string,
   desc: string,
   roles: string[],
-  operatorCodes?: Set<string>,
+  operatorPerms?: Set<string>,
 ) {
   if (!PHONE_REGEX.test(phone)) {
     throw AppError.badRequest('手机号格式不正确')
@@ -164,11 +164,11 @@ export async function createUser(
 
   // 显式指定角色 = 特权操作：需 user:assign-role；涉及内置角色需 role:grant-super
   if (roles.length > 0) {
-    if (!hasCode(operatorCodes, 'user:assign-role')) {
+    if (!hasPerm(operatorPerms, 'user:assign-role')) {
       throw AppError.forbidden('没有分配角色的权限')
     }
     const builtinIds = await builtinRoleIds()
-    if (roleIds.some((rid) => builtinIds.has(rid)) && !hasCode(operatorCodes, 'role:grant-super')) {
+    if (roleIds.some((rid) => builtinIds.has(rid)) && !hasPerm(operatorPerms, 'role:grant-super')) {
       throw AppError.forbidden('涉及超级管理员角色需要超级授权')
     }
   }
@@ -200,7 +200,7 @@ export async function createUser(
 export async function updateUser(
   id: string,
   body: Record<string, unknown>,
-  operatorCodes?: Set<string>,
+  operatorPerms?: Set<string>,
 ) {
   const patch: Record<string, unknown> = {}
 
@@ -225,7 +225,7 @@ export async function updateUser(
       throw AppError.badRequest('角色格式不合法')
     }
     // 分配角色属独立操作：结构通过后先验操作码
-    if (!hasCode(operatorCodes, 'user:assign-role')) {
+    if (!hasPerm(operatorPerms, 'user:assign-role')) {
       throw AppError.forbidden('没有分配角色的权限')
     }
     // 结构通过后走与 create 共用的「去重 → 格式 → 值域」校验；空数组在 validateRoleIds 里拦 400
@@ -239,7 +239,7 @@ export async function updateUser(
     const touchesBuiltin =
       roleIds.some((rid) => builtinIds.has(rid)) ||
       target.roles.some((rid) => builtinIds.has(String(rid)))
-    if (touchesBuiltin && !hasCode(operatorCodes, 'role:grant-super')) {
+    if (touchesBuiltin && !hasPerm(operatorPerms, 'role:grant-super')) {
       throw AppError.forbidden('涉及超级管理员角色需要超级授权')
     }
     // 最后一名 grant-super 持有者保护：语义是「不能失去 grant-super」而非「不能动 roles」——
@@ -279,7 +279,7 @@ export async function updateUser(
 }
 
 // 删除：不能删自己（operatorId 来自 auth 中间件）；持内置角色用户与最后一名超管受特权保护（rbac-design §4.4 #3/#5）
-export async function deleteUser(id: string, operatorId: string, operatorCodes?: Set<string>) {
+export async function deleteUser(id: string, operatorId: string, operatorPerms?: Set<string>) {
   if (id === operatorId) {
     throw AppError.badRequest('不能删除当前登录用户')
   }
@@ -290,7 +290,7 @@ export async function deleteUser(id: string, operatorId: string, operatorCodes?:
   }
   const builtinIds = await builtinRoleIds()
   const holdsBuiltin = target.roles.some((rid) => builtinIds.has(String(rid)))
-  if (holdsBuiltin && !hasCode(operatorCodes, 'role:grant-super')) {
+  if (holdsBuiltin && !hasPerm(operatorPerms, 'role:grant-super')) {
     throw AppError.forbidden('删除超级管理员需要超级授权')
   }
   const holders = await grantSuperHolderUserIds()

@@ -14,13 +14,8 @@ const userStore = useUserStore()
       <p>欢迎使用商品运营管理后台 —— 从这里开始管理你的品牌、商品与团队权限。</p>
     </el-card>
 
-    <!-- 数据大屏入口：v-permission 控显隐（无 /screen 权限的用户不可见），全屏页的显式正向入口 -->
-    <el-card
-      v-permission="'/screen'"
-      shadow="never"
-      class="entry-card"
-      @click="router.push('/screen')"
-    >
+    <!-- 数据大屏入口：静态页人人可见（放开判权定案），全屏页的显式正向入口 -->
+    <el-card shadow="never" class="entry-card" @click="router.push('/screen')">
       <div class="entry-body">
         <el-icon :size="28" color="#00e5ff"><Monitor /></el-icon>
         <div>

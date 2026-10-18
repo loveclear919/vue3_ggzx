@@ -4,7 +4,7 @@ import { AppError } from '../utils/AppError.js'
 import { getParamId } from '../utils/paramId.js'
 import { ok } from '../utils/respond.js'
 import * as userService from '../services/user.js'
-import { getPermissionCodesForUser } from '../services/rbac.js'
+import { getUserRbac } from '../services/rbac.js'
 
 // 处理层：用户信息接口（当前用户）+ 用户管理接口（列表 / 新增 / 更新 / 删除）
 
@@ -18,8 +18,8 @@ function requireUserId(req: AuthRequest): string {
 
 export async function getInfo(req: AuthRequest, res: Response) {
   const data = await userService.getUserById(requireUserId(req))
-  const codes = await getPermissionCodesForUser(data.userId)
-  ok(res, { ...data, codes: [...codes] })
+  const { perms, routes } = await getUserRbac(data.userId)
+  ok(res, { ...data, perms: [...perms], routes })
 }
 
 export async function updateInfo(req: AuthRequest, res: Response) {
@@ -74,7 +74,7 @@ export async function createUser(req: AuthRequest, res: Response) {
     password,
     desc ?? '',
     roles ?? [],
-    req.permissionCodes,
+    req.permissionPerms,
   )
   ok(res, data, '新增成功')
 }
@@ -85,7 +85,7 @@ export async function updateUser(req: AuthRequest, res: Response) {
   const data = await userService.updateUser(
     id,
     (req.body ?? {}) as Record<string, unknown>,
-    req.permissionCodes,
+    req.permissionPerms,
   )
   ok(res, data, '更新成功')
 }
@@ -93,6 +93,6 @@ export async function updateUser(req: AuthRequest, res: Response) {
 export async function deleteUser(req: AuthRequest, res: Response) {
   const id = getParamId(req, '缺少用户 id')
 
-  await userService.deleteUser(id, requireUserId(req), req.permissionCodes)
+  await userService.deleteUser(id, requireUserId(req), req.permissionPerms)
   ok(res, null, '删除成功')
 }
