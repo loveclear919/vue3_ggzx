@@ -32,7 +32,7 @@
 
 主要工作：
 
-· **权限体系前端闭环**：菜单采用「静态路由 + meta.code 过滤」而非 addRoute 动态注册，从根上规避动态路由刷新丢失的持久化与竞态问题；按钮级用 v-permission 指令做 display 切换（可逆、不破坏 vnode 对账），配合路由守卫与 axios 401/403 拦截形成三级统一裁决，真正裁决权仍在后端 requirePermission 中间件（fail-closed 兜底）；
+· **RBAC 动态路由权限体系**：权限模型对齐若依拆分为权限标识 / 路由地址 / 组件路径等字段，后端一次聚合下发授权路由树，前端静态壳 + `router.addRoute` 运行时注册（登出经移除函数物理摘除、换账号零残留）；守卫内完成「注册 → 重放导航」时序——排查并修复 `redirectedFrom` 携带失效 name 导致重放误判的 bug（刷新直达动态路由不闪 404）；按钮级 v-permission 指令 + 后端 requirePermission 每请求实时聚合，权限变更无需刷新即时收敛；
 
 · **虚拟列表与长清单性能**：为千条级运营待办手写固定行高虚拟列表 —— 轨道高度 = 总行数 × 行高撑出滚动范围、窗口整体 translateY 平移、上下各 overscan 3 行；DOM 与数据量解耦后，1000 条数据仅渲染 21 行 / 261 个 DOM 节点（全量渲染约 11,030 个），经 Chrome DevTools Protocol 探针实测滚动定位漂移 0.00px；并用 CSS contain: size 断开「内容 → 面板高度」耦合，长清单不再撑高整页布局；
 
@@ -74,8 +74,8 @@
 |---|---|---|
 | Vue 3 Composition API | 全项目 8600+ 行 Vue/TS，`<script setup>` + 组合式函数 | 强 |
 | 响应式原理 | （需你口头讲透，见 §四） | 口头 |
-| Vue Router | 静态路由 + meta.code 过滤、路由守卫、keyed fullPath 缓存 | 强 |
-| Pinia | user / permission store（登录聚合 codes、登出清空） | 强 |
+| Vue Router | addRoute 动态注册（后端下发路由树 + 守卫重放）、keyed fullPath 缓存 | 强 |
+| Pinia | user / permission store（聚合 perms + 路由树，addRoute 注册与快照同源） | 强 |
 | Element Plus 二次封装 | 分类选择器、图片上传、分页三个跨页复用组件 | 强 |
 | ECharts 按需注册 / resize | `utils/echarts.ts` 按视图注册；大屏 4 图表 + ResizeObserver 兜底 | 强 |
 | CSS 变量令牌化 | 设计令牌 CSS 变量 + `dash-tokens.mts` 供 ECharts 读 JS 值 | 强 |
@@ -90,12 +90,12 @@
 
 > 标准：每段 15 秒能说清「难点—方案—结果」，且每个数字都能答出「怎么测的、基准是什么」。
 
-### ① 权限体系前端闭环
+### ① RBAC 动态路由权限体系
 
-- **难点**：三级统一裁决 + 刷新不丢菜单。**方案**：静态路由过滤而非 addRoute + v-permission 指令 + 守卫/拦截器。**效果**：无动态路由持久化与竞态、菜单与可达性同源。
-- **会问**：为什么不用 addRoute？（★ 本条最值钱的追问）
-- **15 秒版**：动态注册路由刷新会丢路由表，得持久化重建还容易和守卫竞态；我把路由表写死、每项挂 meta.code，登录后用后端 codes 过滤菜单，菜单显隐和路由可达性判断的是同一份数据；按钮级只是体验层，真正裁决永远在后端 403。
-- **出处**：`stores/permission.ts:11`、`router/routes.ts:3-6`、`directives/permission.ts:4-11`、`router/guards.ts:75`。
+- **难点**：刷新不丢路由 + 注册时序不竞态 + 权限变更即时收敛。**方案**：后端一次聚合下发授权路由树，前端静态壳 + addRoute 运行时注册，守卫内「注册 → 重放导航」；登出用 addRoute 移除函数物理摘除。**效果**：刷新直达动态路由不闪 404、换账号零残留、菜单与路由快照同源。
+- **会问**：刷新后路由丢了怎么办？登出后下个账号会看到上个人的菜单吗？（★ 本条最值钱的追问）
+- **15 秒版**：守卫是导航唯一入口——刷新后先拉用户信息拿到授权路由树、addRoute 挂上，再用 redirectedFrom 取回原目标重放导航；这里踩过一个坑：redirectedFrom 带着冷启动时匹配到的 not-found 名字，resolve 会按名字匹配永远撞 catch-all，剥掉名字按路径重判才修好；登出时逐个调用 addRoute 返回的移除函数物理摘路由，快照清空，下个账号从零重建。
+- **出处**：`router/guards.ts`（重放分支）、`stores/permission.ts`（buildRoutes/reset）、`router/dynamicRoutes.ts`（组件映射）、`directives/permission.ts`。
 
 ### ② 虚拟列表与长清单性能
 

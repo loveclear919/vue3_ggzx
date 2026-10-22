@@ -52,7 +52,7 @@ builtin: { type: Boolean, default: false }
 
 防自我锁死：builtin 角色 permissions 修改**不允许移除 grant-super**。
 
-**关键约定（R11）**：service 不读 req——特权特判一律走显式参数 `operatorCodes?: Set<string>`，controller 透传 `req.permissionCodes`；`undefined` 按无特权 fail-closed。`hasCode = (codes, code) => codes?.has(code) ?? false`。
+**关键约定（R11）**：service 不读 req——特权特判一律走显式参数 `operatorPerms?: Set<string>`，controller 透传 `req.permissionPerms`；`undefined` 按无特权 fail-closed。`hasPerm = (perms, perms) => perms?.has(perms) ?? false`。
 
 **改名判定口径（踩过两次的坑）**：前端表单恒带全字段，后端拿「字段出现」当「意图变更」必误伤。拦截必须绑定**值的变化**——builtin 改名拦截是 `roleName.trim() !== target.roleName` 才 403；同源教训见权限模块「编辑名称不重排」（parentId 同值不触发跨父逻辑）。
 
@@ -92,7 +92,7 @@ builtin: { type: Boolean, default: false }
 
 聚合链（rbac.ts，共 3 次查询）：`User.roles → Role.permissions → Permission 全表内存 Map 祖先补全 → Set<code>`。查库而非 JWT 内嵌：改权限立即生效不用重登。
 
-**数据形态约定**：后端内部 Set，DTO 边界 `[...codes]` 转数组；前端收数组，判权处转 Set。
+**数据形态约定**：后端内部 Set，DTO 边界 `[...perms]` 转数组；前端收数组，判权处转 Set。
 
 ## 五、错误处理全链路
 
@@ -110,7 +110,7 @@ builtin: { type: Boolean, default: false }
 
 ## 六、验证清单
 
-- [ ] 角色 CRUD 四接口边界测试（`pnpm --filter backend run test:boundary`，158 例含 RBAC 矩阵）
+- [ ] 角色 CRUD 四接口边界测试（`pnpm --filter backend run test:boundary`，168 例含 RBAC 矩阵）
 - [ ] 普通用户（仅 /home+/screen）调 `GET /role` → 403
 - [ ] 无 assign-perm 的操作者 PATCH permissions → 403
 - [ ] 勾 grant-super 给普通角色 → 403；超管操作 → 200

@@ -6,13 +6,16 @@
 
 **用户认证**
 
-- 手机号注册 / 登录（bcrypt 加盐哈希 + JWT，7 天有效期）；username 为可改展示名，注册自动生成「用户+随机编码」
+- 手机号注册 / 登录（bcrypt 加盐哈希 + JWT，2 小时有效期）；username 为可改展示名，注册自动生成「用户+随机编码」
 - 登录态持久化：token 存 localStorage（唯一事实源），刷新不丢失；个人资料（头像 / 展示名）+ 自助改密
 
-**RBAC 权限闭环**
+**RBAC 权限闭环（动态路由版）**
 
-- 权限树（菜单/按钮两级，自引用 + 环校验 + 同层排序交换）；角色管理（内置角色保护）；用户-角色-权限三级聚合
-- 四层防线：后端 `requirePermission` 403（安全边界）/ 前端守卫判权（fail-open）/ 菜单过滤（静态路由 ∩ codes）/ `v-permission` 按钮显隐
+- 权限模型对齐若依：`perms`（权限标识）/ `path`（路由地址）/ `component` / `icon` / `hidden` 拆分，分组与根节点空标识（部分唯一索引），权限树 CRUD + 环校验 + 同层排序交换
+- 后端一次聚合双产物：login / getInfo 同时下发权限标识集合与**授权路由树**（祖先补全、防环、空分组剪枝、静态页排除）
+- 前端**动态路由注册**：静态壳（login / home / screen / 404）+ `addRoute` 运行时挂载，守卫重放时序（含 `redirectedFrom` name 陷阱修复）、登出物理摘除（addRoute 移除函数）、HMR 自愈
+- 四层防线：后端 `requirePermission` 403（每请求实时聚合）/ 动态注册物理拦截 / 菜单与路由快照同源 / `v-permission` 按钮显隐
+- **403 权限自愈**：接口 403 静默重拉用户信息，路由 / 菜单 / 按钮即时收敛——管理员收权，用户无需刷新即被踢回可访问页
 - 特权体系：`role:grant-super` 统一判据（授予撤销、最后一名超管保护、提权闭环、防自我锁死）
 - 权限变更即时生效（每次请求实时聚合，无需重登）
 
@@ -22,11 +25,17 @@
 - SPU 管理（平台属性 + 销售属性、跨分类校验、SKU 存在时销售属性冻结）
 - SKU 笛卡尔积生成（combinationKey 唯一索引防重、防 OOM、上架闸门 I11、完整性提示）
 
+**数据大屏**
+
+- 供应侧商品运营大屏：v3 面板取舍方法论（可运营 / 有方差 / 不冗余三条判据）
+- 面板：KPI×5（可售率 hero）/ 价格带（未定价单列）/ 品牌货值 TOP5 / SKU 状态环 / 待办 SKU 清单 / 维度组合库存热力图（按 stock 上色、SPU 可搜索分组下拉、容器查询单位响应式）
+- ECharts 6 按需注册 + 30s 轮询防竞态 + vw/vh 响应式布局（--dash-\* 设计令牌）
+
 **体验与工程**
 
 - 暗黑模式（Element Plus 暗色变量 + 三态切换 + 首帧防闪烁）
 - helmet / 认证限流 / 防用户名枚举 / 统一错误处理（AppError → 状态码信封）
-- 数据体检脚本（17 项引用完整性检查）、158 例边界测试、双端类型检查 + pre-push 门禁
+- 数据体检脚本（17 项引用完整性检查）、168 例边界测试、双端类型检查 + pre-push 门禁
 
 ## 🛠 技术栈
 
@@ -55,11 +64,11 @@ vue3_ggzx
 ├── vue-project/                # Vue 3 前端（端口 5173，/api 代理到后端）
 │   ├── src/
 │   │   ├── api/                #   接口层（按页面域拆分 + 类型化）
-│   │   ├── router/             #   路由（meta.code 对账）+ 守卫（认证/判权/fail-open）
+│   │   ├── router/             #   路由（静态壳 + 后端路由树动态注册）+ 守卫（认证/注册重放/fail-open）
 │   │   ├── stores/             #   Pinia（user / permission / setting）
 │   │   ├── directives/         #   v-permission 按钮级显隐
 │   │   ├── composables/        #   usePagedList / useLatestRequest
-│   │   ├── utils/              #   axios 封装、可达性判定、listToTree、storage 收口
+│   │   ├── utils/              #   request 层（拦截器薄壳 + 状态码 handler 分发 + silent）、可达性判定、listToTree、storage 收口
 │   │   ├── views/              #   login / home / screen / acl / product
 │   │   ├── components/         #   分页、分类下钻、图片上传器
 │   │   └── styles/             #   全局样式 + 暗色主题
@@ -84,7 +93,7 @@ vue3_ggzx
    pnpm --filter backend run seed:admin       # 基础角色 + 权限基线 + 超管账号（13800138000 / 123456）
    ```
 5. **启动**：`pnpm dev`（并行启动前后端），打开 http://127.0.0.1:5173
-6. **验证**：`pnpm check`（双端类型检查）、`pnpm --filter backend run audit:data`（数据体检）、`pnpm --filter backend run test:boundary`（需后端已启动，158 例）
+6. **验证**：`pnpm check`（双端类型检查）、`pnpm --filter backend run audit:data`（数据体检）、`pnpm --filter backend run test:boundary`（需后端已启动，168 例）
 
 ## 📸 截图
 
@@ -103,7 +112,7 @@ vue3_ggzx
 | 命令                                | 作用                                       |
 | ----------------------------------- | ------------------------------------------ |
 | `pnpm build` / `pnpm start`         | 生产构建（tsc → dist）/ 启动构建产物       |
-| `pnpm test:boundary`                | 边界测试（158 例，需 dev server 在跑）     |
+| `pnpm test:boundary`                | 边界测试（168 例，需 dev server 在跑）     |
 | `pnpm audit:data`                   | 数据体检（17 项引用完整性，问题 exit 1）   |
 | `pnpm type-check`                   | 类型检查（src + scripts 双配置）           |
 | `pnpm clean:residue`                | 清理失败中断的测试残留（按前缀直连库清扫） |
