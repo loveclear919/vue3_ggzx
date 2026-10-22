@@ -66,6 +66,27 @@ export default defineConfig({
       },
     },
   },
+  // 生产测试（vite preview 服务 dist）：preview 不继承 server.proxy，需单独声明同款代理。
+  // 注意 /prod-api：.env.production 的 VITE_APP_BASE_API=/prod-api（生产部署由 nginx 反代），
+  // 本地模拟生产时必须把该前缀也转发到后端，并重写回 /api（后端路由挂 /api/*）
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/prod-api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/prod-api/, '/api'),
+      },
+      '/uploads': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
+  },
   // 把 @/ 映射到 src/
 
   resolve: {
